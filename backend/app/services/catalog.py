@@ -398,12 +398,36 @@ def _assumptions(f: SearchFilters, results: list[tuple[Part, list[Rating]]]) -> 
     return notes
 
 
-def search_actuators(db: Session, filters: SearchFilters) -> dict:
-    """Recommend actuators meeting every requirement, or explain what fails and what is closest."""
+def search_actuators(
+    db: Session, filters: SearchFilters, require_power_supply: bool = False
+) -> dict:
+    """Recommend actuators meeting every requirement, or explain what fails and what is closest.
+
+    With `require_power_supply` (the agent's tool, design B2a), a search without a voltage whose
+    matches span several power supplies returns `power_supply_needed` and the supplies that have
+    matches, instead of mixing models the user cannot use (US-08 AC1).
+    """
     hz = _freq(filters)
     candidates = [(p, r) for p in _all_parts(db) if p.data_available for r in p.ratings]
     constraints = _constraints(filters)
     matches = list(_matching(candidates, constraints).values())
+
+    if matches and require_power_supply and filters.voltage is None:
+        supplies: dict[str, int] = {}
+        for part, _ in matches:
+            label = power_supply_label(part.table)
+            supplies[label] = supplies.get(label, 0) + 1
+        if len(supplies) > 1:
+            return {
+                "status": "power_supply_needed",
+                "total_matches": len(matches),
+                "supplies_with_matches": [
+                    {"power_supply": label, "matches": n} for label, n in supplies.items()
+                ],
+                "requirements": [c.label for c in constraints],
+                "message": "Models meet these requirements on several power supplies. Ask which "
+                "supply the user has, offering these supplies as quick replies.",
+            }
 
     if matches:
         matches.sort(key=lambda m: _sort_value(filters, m[0], m[1]))

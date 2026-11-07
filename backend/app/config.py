@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # app's debug screen works out of the box; turn off in production.
     debug_endpoints: bool = True
 
+    # Optional Langfuse tracing (design Q6): off unless both keys are set.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
+
 
 @lru_cache
 def get_settings() -> Settings:

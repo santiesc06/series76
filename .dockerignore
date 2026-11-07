@@ -1,9 +1,10 @@
 # Keep secrets and everything the backend image does not need out of the Docker build context.
-# Secrets are passed at runtime (docker compose `env_file`), never baked into the image.
+# Secrets are passed at runtime (docker compose `environment`), never baked into the image.
 
 # Secrets
 .env
 *.env
+**/.env
 !.env.example
 
 # VCS, tooling, editors
@@ -22,3 +23,5 @@ mobile/
 docs/
 data/raw/
 data/interim/
+backend/tests/
+backend/evals/results/

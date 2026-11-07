@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA = REPO_ROOT / "data"
 
@@ -19,5 +17,7 @@ PROCESSED = DATA / "processed" / "actuators.json"  # committed: the verified dat
 
 
 def load_metadata() -> dict:
+    import yaml  # lazy: `ingest load` (run in the Docker image) does not need PyYAML
+
     with METADATA.open(encoding="utf-8") as f:
         return yaml.safe_load(f)

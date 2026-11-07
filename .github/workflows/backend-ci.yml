@@ -3,9 +3,9 @@ name: backend-ci
 on:
   push:
     branches: [main]
-    paths: ["backend/**", "data/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "data/**", "docker-compose.yml", ".dockerignore", ".github/workflows/backend-ci.yml"]
   pull_request:
-    paths: ["backend/**", "data/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "data/**", "docker-compose.yml", ".dockerignore", ".github/workflows/backend-ci.yml"]
 
 jobs:
   lint-and-test:
@@ -53,3 +53,12 @@ jobs:
       - name: Tests
         # Tests never call the LLM (budget-capped key); no secrets are needed here.
         run: uv run pytest -q
+
+  docker-build:
+    # The image the evaluator builds with `docker compose up --build` must keep building.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t series76-backend:ci .

@@ -54,3 +54,8 @@ def test_small_numbers_with_a_unit_are_checked():  # B4b
 
 def test_total_count_from_the_tool_passes():
     assert check("There are 21 matching models.") == []
+
+
+def test_series_name_and_size_codes_are_identifiers():  # B4a, eval run 2026-11-07
+    assert check("No Series 76 model reaches that; sizes 765, 766 and 767 are the largest.") == []
+    assert check("It delivers 766 Nm.") == ["766"]  # with a unit it is a value again
