@@ -1,0 +1,94 @@
+{
+  "summary": {
+    "model": "anthropic/claude-haiku-5.5",
+    "date": "2026-11-07T17:24:48+00:00",
+    "cases_passed": 1,
+    "cases_total": 1,
+    "checks_passed": 7,
+    "checks_total": 7,
+    "cost_usd": 0.0011,
+    "median_latency_ms": 3441,
+    "wall_time_s": 4.1
+  },
+  "cases": [
+    {
+      "id": "lookup-basic",
+      "covers": [
+        "US-01 AC1",
+        "US-01 AC3"
+      ],
+      "passed": true,
+      "checks_passed": 7,
+      "checks_total": 7,
+      "cost_usd": 0.001126,
+      "turns": [
+        {
+          "query": "What is the torque of 763B00-11300000/A?",
+          "answer": "763B00-11300000/A produces 4400 in-lbs (500 Nm) of torque in On/Off service and 3350 in-lbs (380 Nm) in Modulating service.",
+          "status": "answered",
+          "view": "cards",
+          "products": [
+            "763B00-11300000/A"
+          ],
+          "alternatives": [],
+          "quick_replies": [],
+          "tools": [
+            {
+              "tool": "lookup_part",
+              "args": {
+                "part_number": "763B00-11300000/A"
+              }
+            }
+          ],
+          "number_check": {
+            "status": "pass",
+            "unsupported": []
+          },
+          "tokens": {
+            "input": 10106,
+            "output": 231
+          },
+          "cost_usd": 0.001126,
+          "latency_ms": 3441,
+          "checks": [
+            [
+              "no_internals",
+              true,
+              ""
+            ],
+            [
+              "numbers_supported",
+              true,
+              ""
+            ],
+            [
+              "no_invented_parts",
+              true,
+              ""
+            ],
+            [
+              "language",
+              true,
+              ""
+            ],
+            [
+              "status",
+              true,
+              ""
+            ],
+            [
+              "products_exactly",
+              true,
+              ""
+            ],
+            [
+              "answer_any",
+              true,
+              ""
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
