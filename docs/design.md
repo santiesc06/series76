@@ -211,7 +211,7 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 1. **Data:** table metadata YAML → dual extraction → diff and review → validation tests → `actuators.json`.
 2. **Database and tools:** Alembic schema → `ingest load` → repositories → 3 tools + tests.
 3. **Agent and API:** prompt → agent → hydration and number check → conversation service → endpoints → API tests.
-4. **Evals and Docker:** eval set and runner → model comparison → Dockerfile and compose → fresh-clone check.
+4. **Evals and Docker:** eval set and runner → Dockerfile and compose → fresh-clone check. The **model comparison** (§3.2) is deferred until after the app (user, 2026-11-07): it does not affect the app, and Haiku 5.5 already passes the full eval set.
 5. **App:** Figma → theme → networking → Conversations → Chat (cards, comparison, quick replies) → Debug.
 6. **Docs and delivery:** README, evals report, final fresh-clone test.
 
@@ -237,8 +237,39 @@ Details the approved decisions (B1–B7, C1–C7) left open, decided while imple
 
 ---
 
+## 7c. Phase 4 implementation details (🟡 proposed, waiting for approval)
+
+| ID | Detail | Why / trade-off |
+|---|---|---|
+| E1 | **Eval runner calls the conversation service in-process** (`handle_turn`, the same code the API runs), not over HTTP. Each case runs in a transaction that is **rolled back**, so eval conversations never stay in the database. | No server to start and nothing to clean up. Trade-off: HTTP routing and serialization are not exercised (the API tests cover them). |
+| E2 | **Always-on checks** for every eval turn: no tool names in the answer, the number check did not fall back, no invented part number was rejected, and the answer is in the question's language (B4c detector). Plus per-turn checks from `questions.yaml` (status, expected / excluded part numbers, product fields, alternatives, quick replies, answer substrings). | Deterministic and free to grade (Q2). A test fails on unknown check names, so a typo cannot silently skip a check. |
+| E3 | **Cost guard:** `--max-cost` (default USD 1) stops a run; prices per model in `evals/models.yaml`. Results go to `evals/results/<timestamp>_<model>.json` and are committed as evidence for `docs/evals.md`. | Protects the USD 10 key. Committed results let the reviewer see real runs without spending. |
+| E4 | **Cases state the power supply** whenever the expected outcome is a recommendation or a no-match. Where the AC example has none (US-07 AC5 "fastest explosionproof", US-10 AC3 "at least 10,000 Nm"), US-08 AC1 tells the agent to ask first, so the eval either adds the supply or accepts `clarification_needed` too. | Those ACs and US-08 AC1 conflict when no supply is given; asking is the safer behavior and matches the prompt. |
+| D1 | **Docker image:** `python:3.12-slim` + uv, **runtime dependencies only** (no dev/ingest groups), non-root user, healthcheck on `/health/ready`, `APP_DISABLE_DOTENV=1`. On every start: `alembic upgrade head` → `python -m ingest load` → uvicorn (A4). `ingest/paths.py` imports PyYAML lazily so `load` runs without it. | `docker compose up --build` gives a working system on an empty database (verified from a fresh copy). Reloading the catalog on every start is idempotent and takes under a second. |
+| D2 | **Compose passes an explicit list of variables** to the backend (`environment:` with `${VAR:-default}`), not `env_file: .env`. Compose reads the values from `.env`; the image never contains it (`.dockerignore`). `DATABASE_URL` is built from the `POSTGRES_*` values with host `db`. `API_PORT` (default 8000) sets the host port. | Only the variables the backend needs reach the container (extraction keys do not). `docker compose --env-file .env.example …` runs everything without reading `.env`. |
+| D3 | **CI builds the Docker image** (new `docker-build` job). | A broken Dockerfile fails the PR instead of the evaluator's first run. |
+| B10a ✅ 2026-11-07 | **Slots follow the status** (extends B10, found by the first eval run): with `no_match`, any `product_refs` become alternatives (with their "Does not meet / Available if you relax" label); with `clarification_needed`, no cards are shown and the choices are the quick replies. The prompt asks for the same; the debug data records `slot_fix` when the backend had to correct it. | First eval run: the model showed relaxed or example models as matches in 4 of 34 cases. A deterministic rule means a non-matching part can never look like a match, whatever the model does. Trade-off: an ambiguous follow-up ("which of the two?") does not repeat the two cards; the quick replies name them. |
+| B2a ✅ 2026-11-07 | **Power-supply guard in the search tool:** a search without a voltage whose matches span 2+ power supplies returns `power_supply_needed` with the supplies that have matches (and how many), and no product list; the agent asks, offering those supplies as quick replies. If only one supply has matches it answers directly; if nothing matches it says "no model" as before. The guard is on for the agent's tool only (`require_power_supply=True`); the service function is unchanged for other callers. | Second eval run: asked "an actuator for 500 Nm", the model showed 5 cards mixing 110V, 220V and 3-phase models and asked for the voltage only at the end (US-08 AC1). Deterministic, and the quick replies offer only supplies that can meet the requirement. Trade-off: browsing questions without a supply ("fastest explosionproof actuator") also get the voltage question first. |
+| B4a′ | **Series name and size codes are identifiers** in the number check ("Series 76", "sizes 766 and 767"), unless a unit follows ("766 Nm" is checked). Bug fix within B4a, which already excluded model codes. | First eval run: 5 of 34 cases fell back because "Series 76" was read as an invented value. |
+| L1 | **Langfuse wiring:** `app/observability.py` imports Langfuse only when both keys are set; runs are grouped by `session_id` and tagged `api` or `eval` + case id; any tracing error is logged and the turn continues without tracing. The eval runner flushes traces at the end. Verified 2026-11-07: an eval run produced its traces in Langfuse Cloud, tagged `eval`. | Q6 says tracing is optional; it must never cost a user's answer. |
+
+---
+
 ## 8. Extraction run log
 
 | Date | Models | Result |
 |---|---|---|
 | 2026-11-07 | A `gemini-3.5-flash` (Google AI Studio free tier) · B `anthropic/claude-haiku-5.5` (OpenRouter, USD 0.012) | 912/917 cells agree. 5 conflicts resolved by hand in `data/review/resolutions.yaml`: 4 empty-vs-"N/A" Motor Power cells (page 2) and one merged-cell boundary (`764Y30-11300000/A`, 180 W, page 4). Model A misread all 11 part numbers of `wp_110_1ph` (dropped a zero) in two runs; handled by A2b. Validation rules and 23 independent spot values pass. `gemini-3.8-flash` was unavailable (HTTP 503) at the time. |
+
+
+## 9. Known limitations
+
+Accepted for this scope; each has a known next step.
+
+| Limitation | Why it is acceptable now | Next step |
+|---|---|---|
+| Migrations run when the backend container starts. | One backend instance; Alembic runs before the server accepts requests. | With several replicas, run `alembic upgrade head` as a one-off job before rolling out. |
+| One eval run per change; LLM output varies between runs. | Temperature 0, deterministic checks, 34/34 on the latest run. | Run each case 3 times and report a pass rate per case. |
+| Eval runner switches the model by changing settings at runtime. | It is a command-line tool, not server code. | Pass the model and prices explicitly through the service. |
+| `app/services/conversation.py` is ~400 lines (turn flow, response building, reading). | One cohesive flow, covered by API tests. | Move response building (cards, slots, view) into its own module. |
+| The image keeps the `uv` binary (~40 MB), needed only at build time. | Simplicity of a single-stage build. | Two-stage build: install in a builder stage, copy `/opt/venv` only. |
