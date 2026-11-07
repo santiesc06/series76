@@ -39,7 +39,9 @@ def test_clean_part_number_detects_footnote_marker():
 
 
 def test_match_key_ignores_case_separators_and_suffix():
-    assert match_key("763b00-11300000") == match_key("763B00-11300000/A") == "763B0011300000"
+    keys = {match_key(q) for q in ["763b00-11300000", "763B00-11300000/A", "763B00 11300000 A"]}
+    assert keys == {"763B0011300000"}
+    assert match_key("761A") == "761A"  # partial input keeps its letters
 
 
 def _row(part, **overrides):
