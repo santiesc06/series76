@@ -50,6 +50,7 @@ def run_agent(
     system_prompt: str,
     messages: list[BaseMessage],
     max_tool_iterations: int,
+    run_config: dict | None = None,
 ) -> AgentRun:
     agent = create_agent(
         model,
@@ -58,7 +59,8 @@ def run_agent(
         response_format=ToolStrategy(FinalAnswer),
     )
     # Each tool iteration is two graph steps (model, tools); +3 for the final answer.
-    config = {"recursion_limit": 2 * max_tool_iterations + 3}
+    # run_config adds optional tracing callbacks and metadata (design Q6).
+    config = {**(run_config or {}), "recursion_limit": 2 * max_tool_iterations + 3}
     try:
         output = agent.invoke({"messages": messages}, config)
     except GraphRecursionError as exc:
