@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     extraction_model: str = ""
 
     # Database
-    database_url: str = "postgresql+psycopg://series76:series76@localhost:5432/series76"
+    database_url: str = "postgresql+psycopg://series76:series76@localhost:5433/series76"
 
     # API
     log_level: str = "INFO"
