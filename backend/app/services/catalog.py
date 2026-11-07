@@ -56,7 +56,7 @@ def power_supply_label(table: CatalogTable) -> str:
     return f"{table.voltage}V {'three' if table.phase == 'three' else 'single'} phase"
 
 
-def _certifications(part: Part) -> list[str]:
+def certifications_of(part: Part) -> list[str]:
     return [c for c in part.table.certifications if c != "CSA" or part.csa_certified]
 
 
@@ -96,7 +96,7 @@ def _electrical(part: Part) -> dict:
     }
 
 
-def _notes(part: Part) -> list[str]:
+def part_notes(part: Part) -> list[str]:
     notes = []
     if not part.table.service_split:
         notes.append(THREE_PHASE_NOTE)
@@ -119,7 +119,7 @@ def part_detail(part: Part) -> dict:
             "phase": table.phase,
             "current_type": table.current_type,
         },
-        "certifications": _certifications(part),
+        "certifications": certifications_of(part),
         "csa_certified": part.csa_certified,
         "hazardous_markings": table.markings,
         "frequency_dependent": table.frequency_dependent,
@@ -130,7 +130,7 @@ def part_detail(part: Part) -> dict:
     if part.data_available:
         detail["electrical"] = _electrical(part)
         detail["ratings"] = [_rating_dict(r) for r in part.ratings]
-        detail["notes"] = _notes(part)
+        detail["notes"] = part_notes(part)
     else:
         detail["notes"] = ["Listed in the catalog as N/A: no electrical data is published."]
     return detail
@@ -357,7 +357,7 @@ def _sort_value(f: SearchFilters, part: Part, ratings: list[Rating]) -> float:
 def _result(part: Part, ratings: list[Rating], hz: int) -> dict:
     return {
         **part_identity(part),
-        "certifications": _certifications(part),
+        "certifications": certifications_of(part),
         "matched_ratings": [_rating_dict(r) for r in ratings],
         "frequency_hz": hz if part.table.frequency_dependent else None,
         "speed_s": _speed(part, hz),

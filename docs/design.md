@@ -193,6 +193,8 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 | Q2 | **Evals** (`evals/questions.yaml`, ~30 cases, single and multi-turn): deterministic assertions on `status`, expected / forbidden part numbers in `products`, and the number check. **No LLM-as-judge.** Run manually: `uv run python -m evals.run --model …`; results and cost recorded in `docs/evals.md`. | ✅ | Deterministic, free to grade, every case traces to an AC. |
 | Q3 | CI: lint + format + tests with a Postgres service. Android `assembleDebug` job only if time allows. | ✅ | |
 | Q4 | Token usage and estimated cost logged per request. | ✅ | NFR-05. |
+| Q5 | **Evals run on OpenRouter models only:** prompt iteration and reported results both use the shipped model, and the model comparison uses OpenRouter candidates (e.g. `gpt-oss-120b` as the cheapest). Unit tests keep the scripted fake model (USD 0). Google AI Studio's free API stays limited to extraction (A1), where the assessment's hint applies. | ✅ 2026-11-07 | Measured cost: ~USD 0.0011 per turn on Haiku 5.5, so ~USD 0.05 per eval run and under USD 1 for all iteration. Gemini would save cents, but a prompt tuned on Gemini may not transfer to the shipped model, the free tier's low daily limit can stop a run, and a second provider adds config. Every reported result describes a real candidate model (assessment §5.1). |
+| Q6 | **Langfuse tracing (optional):** a LangChain callback sends each turn's trace (LLM calls, tool calls, tokens, latency) to Langfuse Cloud, only when `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` are set. Off by default. Not self-hosted. Our own debug data in PostgreSQL stays the source for the app's debug screen (US-19). | ✅ 2026-11-07 | A developer dashboard with no setup cost for the evaluator. Self-hosting Langfuse needs ClickHouse, Redis and object storage, too heavy for `docker compose up`. Trade-off: traces go to a third party, and two more secrets live in `.env`. |
 
 ---
 
@@ -212,6 +214,26 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 4. **Evals and Docker:** eval set and runner → model comparison → Dockerfile and compose → fresh-clone check.
 5. **App:** Figma → theme → networking → Conversations → Chat (cards, comparison, quick replies) → Debug.
 6. **Docs and delivery:** README, evals report, final fresh-clone test.
+
+---
+
+## 7b. Phase 3 implementation details (✅ approved 2026-11-07)
+
+Details the approved decisions (B1–B7, C1–C7) left open, decided while implementing Phase 3.
+
+| ID | Detail | Why / trade-off |
+|---|---|---|
+| B4a ✅ | **Number check sources:** a number in `answer_text` passes if it appears in this turn's tool results (values, string values and JSON keys), in anything the user wrote in the conversation, or in the field definitions of the system prompt (90° turn, 50/60 Hz). Part numbers, model codes and digits glued to letters (S4, T4, IIB) are ignored. Decimal comma and thousands dot (Spanish) are understood. | The user's own requirement ("5000 Nm") may be repeated back; it is not a spec value. |
+| B4b ✅ | **Bare integers up to 10 are not checked; followed by a unit they are** ("5 A", "8 starts", "3 Nm", "7 s"). Unit symbols are case-sensitive, so the Spanish preposition "a" ("2 a 60 Hz") is not read as amperes. | Counts and ordinals ("2 models", "Zone 1") would cause false repairs, while a small number with a unit is a spec value. Chosen over "skip all small integers" (misses "5 A") and "check every number" (repairs every count). Trade-off: a small spec value written without a unit is not caught; cards still show the exact value. |
+| B4c ✅ | **Fixed fallback sentence in English or Spanish** when the repair attempt also fails, chosen by a word-list check on the user's message (Spanish-only characters ¿ ¡ ñ, or more Spanish than English function words; English by default). | Keeps NFR-04 without another LLM call. Chosen over "always English". Trade-off: other languages get the English sentence. |
+| B4d ✅ | The repair request is sent to the model as an extra message marked "[Automatic check, not from the user]" and is never saved in the history. | Keeps the conversation history clean. |
+| B5a ✅ | **Context note** = part numbers shown in the last 3 assistant turns (most recent first) + the last search filters, appended to the system prompt. `HISTORY_WINDOW` counts messages (user and assistant), text only. | Enough to resolve "it", "that one", "the same but explosionproof" without resending tool outputs. |
+| B8 ✅ | **A failed turn is rolled back:** if the LLM fails, nothing is saved (no empty new conversation). | The app shows the error with retry; the user's question is not lost on the device. |
+| B9 ✅ | **Highlights are decided by the backend** from the search filters of the turn (min torque → "torque", max speed → "speed"…), not by the LLM. Alternatives carry a `match_note` ("Does not meet: torque ≥ 5000 Nm"). | Deterministic, and the app needs no logic to explain alternatives. |
+| B10 ✅ | **View normalization:** `comparison` with fewer than 2 products becomes `cards`; products present but view `none` becomes `cards`; only alternatives → `cards`. | The LLM's view choice cannot produce an empty or broken screen. |
+| C2a ✅ | `DEBUG_ENDPOINTS` defaults to **true** in the code too (not only in Compose). When false, the debug endpoint answers 404 as if it did not exist. | The debug screen works in local runs without extra config. Production would set it to false. |
+| C4a ✅ | Error codes: `not_found` 404, `invalid_request` 422, `llm_unavailable` / `llm_auth` / `llm_rate_limited` / `llm_budget_exhausted` 502, `agent_step_limit` 504, `llm_not_configured` / `database_unavailable` 503, `internal_error` 500. | One machine-readable code per failure type, so the app can show the right message. |
+| C8 ✅ | `GET /api/sessions` also returns `message_count`. | Lets the app show a count or skip empty sessions; costs one grouped count. |
 
 ---
 

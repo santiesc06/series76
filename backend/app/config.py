@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     # LLM (OpenRouter, OpenAI-compatible API)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_model: str = ""
+    llm_model: str = "anthropic/claude-haiku-5.5"  # design §3.2; must support tool calling
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
+    llm_timeout_s: float = 30.0
+    max_tool_iterations: int = 6  # per user turn (design B1)
+    # USD per 1M tokens, only used to log an estimated cost per request (design Q4)
+    llm_price_input_per_m: float = 0.10
+    llm_price_output_per_m: float = 0.50
 
     # Ingestion: two vision models (OpenAI-compatible APIs) whose extractions are diffed
     extraction_a_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -37,7 +42,10 @@ class Settings(BaseSettings):
 
     # API
     log_level: str = "INFO"
-    history_window: int = 12
+    history_window: int = 12  # previous messages sent to the LLM as context (design B5)
+    # Developer-only endpoint with tool calls and token usage (design C2). On by default so the
+    # app's debug screen works out of the box; turn off in production.
+    debug_endpoints: bool = True
 
 
 @lru_cache
