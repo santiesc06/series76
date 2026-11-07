@@ -43,15 +43,15 @@ Normalized to match how the tables are actually shaped:
 
 ```
 catalog_tables   one row per source table (7)
-  id, code ('wp_110_1ph', 'xp_24_onoff', ...), title, enclosure ('weatherproof'|'explosionproof'),
+  code (PK: 'wp_110_1ph', 'xp_24_onoff', ...), title, page, enclosure ('weatherproof'|'explosionproof'),
   voltage (24|110|220), phase ('single'|'three'|null), current_type ('ac'|'dc'|'ac_dc'),
-  frequency_dependent (bool), service_split (bool), certifications text[], markings text[],
-  hazardous_divisions int[], hazardous_zones int[], nec_gas_groups text[], iec_gas_groups text[],
-  temperature_class text, dust_rated bool, source_page int, notes text[]
+  frequency_dependent (bool), service_split (bool), layout, certifications text[], markings text[],
+  hazardous jsonb (division, zone, nec_gas_groups, iec_gas_group, temperature_class, dust_rated),
+  summary_claim, notes text[], footnotes text[]
 
 parts            one row per Base Part Number (~68)
-  part_number (PK, display form), part_number_norm (unique, for matching), model_code ('763B'),
-  size (1..7), table_id → catalog_tables, data_available (bool, false for N/A),
+  part_number (PK, display form), match_key (unique, for matching), model_code ('763B'),
+  size (1..7), table_code → catalog_tables, data_available (bool, false for N/A), position,
   csa_certified (bool, footnote override), motor_power_w,
   speed_s_60hz, speed_s_50hz, fla_a_60hz, fla_a_50hz, lra_a_60hz, lra_a_50hz
 
@@ -63,7 +63,8 @@ sessions         id (uuid), user_id (nullable, login-ready), title, created_at, 
 messages         id (uuid), session_id, role ('user'|'assistant'), content, payload jsonb, debug jsonb, created_at
 ```
 
-- **Why normalized:** in the PDF, speed/current/power belong to the *part* and torque/duty cycle belong to the *service*. One flat table would duplicate electrical data or need nullable column pairs. A SQL view `v_ratings` joins all three for searching.
+- **Why normalized:** in the PDF, speed/current/power belong to the *part* and torque/duty cycle belong to the *service*. One flat table would duplicate electrical data or need nullable column pairs.
+- **Hazardous markings as JSONB** (✅ changed from separate columns during Phase 2; approved by the user 2026-11-07): a small fixed structure read whole for 2 tables, never filtered by key in SQL. Trade-off: Postgres checks only that the field is valid JSON, not the type of each key; correctness comes from the hand-reviewed `table_metadata.yaml` and the hazardous-area tests. If SQL filtering by zone were ever needed: JSON operators (`(hazardous->>'zone')::int`) or an Alembic migration to columns.
 - **24V tables** (not frequency dependent): the single value is stored in both the 60 Hz and 50 Hz columns, and `frequency_dependent = false` tells the app to show one value. Filters stay uniform.
 - **Migrations:** Alembic. The container runs `alembic upgrade head` then `ingest load` on start.
 
@@ -89,7 +90,11 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 | `search_actuators` | optional filters: enclosure, voltage (±10% mapping, D-4), phase, current type, service, min torque + unit, max speed + frequency, min duty cycle, min cycles/hour, min starts/hour, max FLA, max motor power, CSA required, hazardous zone / division / gas group / dust; `sort_by`; `limit ≤ 5` | `matches` (ranked smallest-adequate first, with total count) · or `no_match` with the **failing constraints** and up to 3 **alternatives** that meet all other constraints |
 | `catalog_overview` | none | available enclosures, power supplies, torque range per table, markings. Used to ask good clarifying questions. |
 
-- **Failing constraint detection** is deterministic: re-run the search dropping one constraint at a time; the constraints whose removal gives results are the failing ones.
+- **Requirements are named predicates evaluated in Python** over the catalog loaded in one query (✅ changed from a planned SQL view during Phase 2; approved by the user 2026-11-07). The database is queried once per search; explaining a failure (US-10) re-checks the requirements in memory, where the SQL version would need one query per requirement. Instant up to thousands of parts. Scaling path: (1) keep the catalog cached in memory and reload it only after `ingest load`; (2) at tens of thousands of parts, move each named predicate into a SQL `WHERE` condition (one-to-one, mechanical).
+- **Failing requirement detection (decided in Phase 2, found by the US-10 test):** requirements are split into *setting* (enclosure, voltage, phase, AC/DC, service, CSA, hazardous area) and *performance* (torque, speed, duty cycle, cycles/starts, current, power). Setting requirements are kept; a performance requirement is reported as failing when dropping it alone gives results, and the alternatives are the closest models on that metric that meet everything else. If the setting itself does not exist (e.g. 24V AC modulating), each setting requirement whose removal gives results is reported with one example.
+- **Hazard hierarchy (D-2e, option A):** Zone 1 / Division 1 / IIB markings also cover Zone 2 / Division 2 / IIA, as interpretation of NEC/IEC conventions (`app/services/hazardous.py`). The literal-only alternative was rejected because the most common hazardous area (Zone 2) would never get an answer.
+- **Safety rule:** a hazardous-area requirement, or "explosionproof", is never relaxed to suggest an alternative. A hydrogen (IIC) area gets "no model", never a weatherproof suggestion.
+- **Lookup matching (decided in Phase 2):** input is normalized to letters and digits (`763b00 11300000 a` = `763B00-11300000/A`). Prefix matching applies only to short input (≤ 6 characters, e.g. `761A00`), so a full-length number with a typo is never silently resolved to a near match; it returns `not_found` with up to 5 suggestions by edit distance. Input not starting with `7` + digit is `invalid_input`.
 - **Comparison** needs no tool: the agent returns 2+ refs with `view = "comparison"`.
 - **Term explanations** (US-06) come from the system prompt, not a tool.
 
@@ -184,6 +189,7 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 | ID | Decision | Status | Why / trade-off |
 |---|---|---|---|
 | Q1 | **Test pyramid:** (1) data validation tests; (2) tool and repository tests against **real PostgreSQL** (local compose; GitHub Actions service container in CI); (3) API tests with LangChain's fake chat model (no cost); (4) evals with the real LLM. | ✅ | SQLite would behave differently from Postgres (arrays, JSONB). The LLM is never called in CI. |
+| Q1b | **Tests never read `.env`:** `APP_DISABLE_DOTENV=1` (set in `tests/conftest.py` and CI) makes settings use only real environment variables and defaults. Tests use a separate database (`series76_test`), migrated with Alembic and loaded once per run; each test runs in a rolled-back transaction. | ✅ | No secrets can reach tests, and the dev database is never modified by tests. |
 | Q2 | **Evals** (`evals/questions.yaml`, ~30 cases, single and multi-turn): deterministic assertions on `status`, expected / forbidden part numbers in `products`, and the number check. **No LLM-as-judge.** Run manually: `uv run python -m evals.run --model …`; results and cost recorded in `docs/evals.md`. | ✅ | Deterministic, free to grade, every case traces to an AC. |
 | Q3 | CI: lint + format + tests with a Postgres service. Android `assembleDebug` job only if time allows. | ✅ | |
 | Q4 | Token usage and estimated cost logged per request. | ✅ | NFR-05. |
