@@ -16,6 +16,7 @@ dependencies = [
 
 [tool.uv]
 package = false
+default-groups = ["dev", "ingest"]
 
 [tool.ruff]
 line-length = 100
@@ -33,4 +34,9 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
+]
+ingest = [
+    "openai>=3.46.0",
+    "pymupdf>=2.1",
+    "pyyaml>=6.0.3",
 ]
