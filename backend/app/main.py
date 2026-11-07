@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from app.api import health
+from app.api import conversation, errors, health
 from app.config import get_settings
 from app.logging_config import configure_logging
 
@@ -14,4 +14,6 @@ app = FastAPI(
     description="Answers questions about Series 76 electric actuators and recommends models.",
 )
 
+errors.register(app)
 app.include_router(health.router)
+app.include_router(conversation.router)
