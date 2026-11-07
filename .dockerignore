@@ -1,0 +1,24 @@
+# Keep secrets and everything the backend image does not need out of the Docker build context.
+# Secrets are passed at runtime (docker compose `env_file`), never baked into the image.
+
+# Secrets
+.env
+*.env
+!.env.example
+
+# VCS, tooling, editors
+.git
+.github
+.claude
+.vscode
+.idea
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+
+# Not part of the backend image
+mobile/
+docs/
+data/raw/
+data/interim/

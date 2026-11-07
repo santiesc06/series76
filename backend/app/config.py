@@ -23,8 +23,13 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
 
-    # Ingestion
-    extraction_model: str = ""
+    # Ingestion: two vision models (OpenAI-compatible APIs) whose extractions are diffed
+    extraction_a_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    extraction_a_api_key: str = ""
+    extraction_a_model: str = ""
+    extraction_b_base_url: str = "https://openrouter.ai/api/v1"
+    extraction_b_api_key: str = ""  # falls back to openrouter_api_key when empty
+    extraction_b_model: str = "anthropic/claude-haiku-5.5"
 
     # Database
     database_url: str = "postgresql+psycopg://series76:series76@localhost:5433/series76"
