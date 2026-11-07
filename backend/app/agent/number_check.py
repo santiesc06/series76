@@ -4,8 +4,9 @@ Every number in the agent's free text must also appear in what the tools returne
 in what the user wrote). Product cards are built from the database and need no check; this guards
 the sentence around them.
 
-Excluded from the check: part numbers and model codes (763B00-11300000/A, 761A), digits glued to
-letters (S4, T4, IIB), and bare small integers up to 10, which are counts and ordinals ("2 models",
+Excluded from the check: part numbers and model codes (763B00-11300000/A, 761A), the series name
+and size codes without a unit ("Series 76", "sizes 766 and 767"), digits glued to letters
+(S4, T4, IIB), and bare small integers up to 10, which are counts and ordinals ("2 models",
 "Zone 1"). A small integer followed by a unit ("5 A", "8 starts") is a spec value and is checked
 (design B4b).
 """
@@ -18,6 +19,9 @@ import re
 PART_RE = re.compile(r"\b76[1-7][A-Z](?:\d{2})?(?:[-\s]?113\d{2}[0-9A-Z]00(?:/A)?)?\b", re.I)
 NUMBER_RE = re.compile(r"(?<![A-Za-z\d.,])\d+(?:[.,]\d+)*")
 SMALL_INT_LIMIT = 10
+# The series name and size codes ("Series 76", "sizes 766 and 767") are identifiers, not values,
+# unless a unit follows them.
+IDENTIFIER_RE = re.compile(r"76[1-7]?")
 # A unit right after a number marks it as a spec value. Symbols are case-sensitive so the Spanish
 # preposition "a" ("2 a 60 Hz") is not read as amperes; words ignore case.
 UNIT_RE = re.compile(
@@ -82,8 +86,11 @@ def unsupported_numbers(text: str, allowed: set[float]) -> list[str]:
         candidates = _candidates(token)
         if not candidates or candidates & allowed:
             continue
+        has_unit = bool(UNIT_RE.match(text, match.end()))
+        if IDENTIFIER_RE.fullmatch(token) and not has_unit:
+            continue
         small = any(v.is_integer() and v <= SMALL_INT_LIMIT for v in candidates)
-        if small and not UNIT_RE.match(text, match.end()):
+        if small and not has_unit:
             continue
         problems.append(token)
     return problems

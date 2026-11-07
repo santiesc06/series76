@@ -52,7 +52,11 @@ def build_tools(db: Session, recorder: ToolRecorder) -> list[StructuredTool]:
     def search_actuators(**filters) -> dict:
         parsed = catalog.SearchFilters(**filters)
         args = parsed.model_dump(exclude_defaults=True)
-        return recorder.run("search_actuators", args, lambda: catalog.search_actuators(db, parsed))
+        return recorder.run(
+            "search_actuators",
+            args,
+            lambda: catalog.search_actuators(db, parsed, require_power_supply=True),
+        )
 
     def catalog_overview() -> dict:
         return recorder.run("catalog_overview", {}, lambda: catalog.catalog_overview(db))
@@ -70,7 +74,8 @@ def build_tools(db: Session, recorder: ToolRecorder) -> list[StructuredTool]:
             name="search_actuators",
             description="Find actuators that meet requirements (enclosure, supply, service, "
             "torque, speed, duty cycle, current, certification, hazardous area). Returns ranked "
-            "matches, or the failing requirement and the closest alternatives.",
+            "matches, the failing requirement and the closest alternatives, or "
+            "power_supply_needed when the voltage is missing.",
             args_schema=catalog.SearchFilters,
         ),
         StructuredTool.from_function(

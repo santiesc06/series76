@@ -160,3 +160,29 @@ def test_overview_describes_every_table(db):
     three_phase = next(t for t in overview["tables"] if t["power_supply"] == "220V three phase")
     assert three_phase["parts_without_data"] == 4
     assert three_phase["services"]["both"]["torque_nm_range"] == {"min": 300, "max": 3000}
+
+
+def _guarded(db, **filters):
+    return search_actuators(db, SearchFilters(**filters), require_power_supply=True)
+
+
+def test_missing_voltage_asks_for_the_supply_with_real_options(db):  # US-08 AC1, B2a
+    result = _guarded(db, min_torque=500)
+    assert result["status"] == "power_supply_needed" and "results" not in result
+    supplies = [s["power_supply"] for s in result["supplies_with_matches"]]
+    assert supplies == ["110V single phase", "220V single phase", "220V three phase"]
+
+
+def test_missing_voltage_with_one_possible_supply_answers_directly(db):  # B2a
+    result = _guarded(db, min_torque=8000)
+    assert result["status"] == "matches"
+    assert {r["power_supply"] for r in result["results"]} == {"220V single phase"}
+
+
+def test_missing_voltage_with_no_match_still_says_no_model(db):  # US-10 AC3, B2a
+    assert _guarded(db, min_torque=10000)["status"] == "no_match"
+
+
+def test_guard_does_not_change_searches_with_a_voltage(db):  # B2a
+    filters = {"voltage": 110, "min_torque": 500}
+    assert _guarded(db, **filters) == search_actuators(db, SearchFilters(**filters))

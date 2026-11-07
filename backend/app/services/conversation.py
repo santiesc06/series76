@@ -21,6 +21,7 @@ from app.agent.runner import AgentRun, base_system_prompt, run_agent
 from app.agent.schemas import FinalAnswer
 from app.config import get_settings
 from app.db.models import ChatSession, Message, Part
+from app.observability import tracing_config
 from app.services.presentation import highlights_for, product_card
 from app.tools.catalog_tools import ToolRecorder, build_tools
 
@@ -155,12 +156,13 @@ def _run_with_number_check(
     system_prompt: str,
     messages: list[BaseMessage],
     user_texts: list[str],
+    run_config: dict,
 ) -> tuple[FinalAnswer, TurnState, dict]:
     settings = get_settings()
     state = TurnState(recorder=ToolRecorder(), runs=[])
     tools = build_tools(db, state.recorder)
 
-    run = run_agent(model, tools, system_prompt, messages, settings.max_tool_iterations)
+    run = run_agent(model, tools, system_prompt, messages, settings.max_tool_iterations, run_config)
     state.runs.append(run)
     allowed = allowed_numbers([c.result for c in state.recorder.calls], user_texts)
     problems = unsupported_numbers(run.answer.answer_text, allowed)
@@ -175,6 +177,7 @@ def _run_with_number_check(
         system_prompt,
         [*run.messages, _repair_message(problems)],
         settings.max_tool_iterations,
+        run_config,
     )
     state.runs.append(repair)
     allowed = allowed_numbers([c.result for c in state.recorder.calls], user_texts)
@@ -210,7 +213,11 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def handle_turn(
-    db: Session, model: BaseChatModel, query: str, session_id: uuid.UUID | None
+    db: Session,
+    model: BaseChatModel,
+    query: str,
+    session_id: uuid.UUID | None,
+    trace_tags: list[str] | None = None,
 ) -> dict:
     settings = get_settings()
     started = time.perf_counter()
@@ -233,8 +240,9 @@ def handle_turn(
     user_texts = [query] + [m.content for m in previous if m.role == "user"]
 
     try:
+        run_config = tracing_config(str(chat.id), trace_tags or ["api"])
         answer, state, check = _run_with_number_check(
-            model, db, system_prompt, messages, user_texts
+            model, db, system_prompt, messages, user_texts, run_config
         )
     except Exception:
         db.rollback()  # a failed turn leaves nothing behind (no empty new conversation)
@@ -252,6 +260,15 @@ def handle_turn(
     alternative_refs = [
         r for r in _dedupe(answer.alternative_refs) if r in allowed_refs and r not in product_refs
     ]
+    # Slots follow the status (design B10a): nothing is shown as a match when no model matches,
+    # and a clarifying question shows no cards (its choices are the quick replies).
+    slot_fix = None
+    if answer.status == "no_match" and product_refs:
+        slot_fix = "products moved to alternatives (no_match)"
+        alternative_refs, product_refs = _dedupe(alternative_refs + product_refs), []
+    elif answer.status == "clarification_needed" and (product_refs or alternative_refs):
+        slot_fix = "cards removed (clarification_needed)"
+        product_refs, alternative_refs = [], []
 
     turn_filters = _last_search_filters(recorder)
     highlight = highlights_for(turn_filters)
@@ -309,6 +326,7 @@ def handle_turn(
             ],
             "number_check": check,
             "rejected_refs": rejected,
+            "slot_fix": slot_fix,
             "context_note": note,
         },
     )

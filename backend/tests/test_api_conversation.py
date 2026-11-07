@@ -193,3 +193,35 @@ def test_llm_failure_returns_502_and_leaves_no_conversation(chat):  # NFR-08
     r = chat([down])
     assert r.status_code == 502 and r.json()["error"]["code"] == "llm_unavailable"
     assert chat.client.get("/api/sessions").json() == []
+
+
+def test_no_match_never_shows_products_as_matches(chat):  # B10a, US-10 AC2
+    r = chat(
+        [
+            tool_call("search_actuators", enclosure="explosionproof", min_torque=5000),
+            final("No model reaches 5000 Nm.", status="no_match",
+                  product_refs=["765Y30-11300000/A"]),
+        ],
+        query="explosionproof, at least 5000 Nm",
+    )  # fmt: skip
+    body = r.json()
+    assert body["products"] == []
+    assert [a["part_number"] for a in body["alternatives"]] == ["765Y30-11300000/A"]
+    assert "torque" in body["alternatives"][0]["match_note"]
+    debug = chat.client.get(f"/api/messages/{body['message_id']}/debug").json()
+    assert debug["slot_fix"] == "products moved to alternatives (no_match)"
+
+
+def test_clarifying_question_shows_no_cards(chat):  # B10a, US-04 AC2, US-08 AC1
+    quick = [{"label": "110V", "message": "761A00-11300000/A"}]
+    r = chat(
+        [
+            tool_call("lookup_part", part_number="761A00"),
+            final("Which variant do you mean?", status="clarification_needed",
+                  product_refs=["761A00-11300000/A"], quick_replies=quick),
+        ],
+        query="specs of 761A00",
+    )  # fmt: skip
+    body = r.json()
+    assert body["products"] == [] and body["alternatives"] == [] and body["view"] == "none"
+    assert body["quick_replies"] == quick
