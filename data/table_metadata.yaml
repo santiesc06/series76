@@ -1,0 +1,148 @@
+# Hand-written, hand-reviewed metadata for the 7 tables in data/raw/series_76_electric_data.pdf.
+# Design decision A2: this information is static and safety-relevant, so it is written by hand
+# (and reviewed against the PDF) instead of being extracted by an LLM. Only numeric rows are extracted.
+#
+# part_number_suffix: printed identically on every row of the table after the 4-character
+#   model code (e.g. 763B + 00-11300000/A). Checked by hand, so the canonical part number is
+#   model code + suffix and does not depend on how a model transcribed each row.
+# layout: which columns the table has (see backend/ingest/layouts.py)
+#   single_phase   On/Off + Modulating ratings in one row, speed/current at 60 and 50 Hz
+#   three_phase    one rating for both services (decision D-1), speed/current at 60 and 50 Hz
+#   onoff_only     24V On/Off table: one service, no 50/60 Hz split
+#   modulating_only 24V Modulating table: one service, no 50/60 Hz split
+
+enclosures:
+  weatherproof:
+    certifications: [CSA, CE, UKCA]          # page header "WEATHERPROOF - CSA, CE, & UKCA"
+    markings: []
+    hazardous: null
+  explosionproof:
+    certifications: [CSA]                    # page header "EXPLOSIONPROOF - CSA"
+    # SOURCE: data PDF, notes on page 3 and note 1 on page 4, "Hazardous Location Certification
+    # (Area Classification)". Copied word for word (the PDF's typo "GRoups" fixed to "Groups").
+    markings:
+      - "Class I, Division 1, Groups C, D; T4"
+      - "Ex d IIB T4 Gb"
+      - "Class I, Zone 1, AEx d IIB T4 Gb"
+    # Structured form of the markings (decision D-2b). Every VALUE below appears literally in the
+    # marking strings above. Comments marked INTERPRETATION explain meaning that the PDF does not
+    # state; it follows NEC 500/505 and IEC 60079 marking conventions. Hierarchy rules (e.g. IIB
+    # also covers IIA) live in code and are documented in docs/design.md.
+    hazardous:
+      gas_class: "I"                         # INTERPRETATION: Class I = flammable gases/vapours
+      division: 1
+      zone: 1
+      nec_gas_groups: [C, D]
+      iec_gas_group: IIB
+      protection: "d"                        # INTERPRETATION: "d" = flameproof enclosure
+      temperature_class: T4
+      dust_rated: false                      # INFERRED from absence: no Class II / Group III
+                                             # (dust) marking is listed (decision D-2c)
+    summary_claim: >-
+      The product summary describes the explosionproof line as compliant with CSA, IECEx/ATEX
+      standards; the per-model data tables list CSA only (decision D-2a).
+
+# Notes printed under every table (pages 1-4).
+common_notes:
+  - "Full load current (FLA) @ Max. rated load"
+  - "Locked rotor current (LRA) @ Locked rotor load"
+  - "Allowable motor voltage tolerance: +/- 10%"
+  - "Allowable power frequency tolerance: +/- 5%"
+  - "Duty cycle per IEC 60034-1 for on/off and modulating service"
+  - "Starts and cycles per hour based on rated torque"
+
+tables:
+  - code: wp_110_1ph
+    part_number_suffix: "00-11300000/A"
+    title: "110V - Single Phase Power"
+    page: 1
+    position: top
+    enclosure: weatherproof
+    voltage: 110
+    phase: single
+    current_type: ac
+    frequency_dependent: true
+    layout: single_phase
+    expected_rows: 11
+
+  - code: wp_220_1ph
+    part_number_suffix: "00-11320000/A"
+    title: "220V - Single Phase Power"
+    page: 1
+    position: bottom
+    enclosure: weatherproof
+    voltage: 220
+    phase: single
+    current_type: ac
+    frequency_dependent: true
+    layout: single_phase
+    expected_rows: 16
+    footnotes:
+      - marker: "*"
+        text: "Sizes 6 and 7 are not CSA Certified"
+        effect: not_csa_certified            # rows whose part number ends with "*"
+
+  - code: wp_220_3ph
+    part_number_suffix: "00-11330C00/A"
+    title: "220V - 3 Phase Power"
+    page: 2
+    position: top
+    enclosure: weatherproof
+    voltage: 220
+    phase: three
+    current_type: ac
+    frequency_dependent: true
+    layout: three_phase
+    expected_rows: 11                        # 4 of them are N/A (decision D-6)
+
+  - code: xp_24_onoff
+    part_number_suffix: "30-11380000/A"
+    title: "24V AC/DC Power - On/Off"
+    page: 3
+    position: top
+    enclosure: explosionproof
+    voltage: 24
+    phase: null
+    current_type: ac_dc
+    frequency_dependent: false
+    layout: onoff_only
+    expected_rows: 5
+
+  - code: xp_24_mod
+    part_number_suffix: "30-11370000/A"
+    title: "24V DC Power - Modulating"
+    page: 3
+    position: bottom
+    enclosure: explosionproof
+    voltage: 24
+    phase: null
+    current_type: dc
+    frequency_dependent: false
+    layout: modulating_only
+    expected_rows: 5
+
+  - code: xp_110_1ph
+    part_number_suffix: "30-11300000/A"
+    title: "110V - Single Phase Power"
+    page: 4
+    position: top
+    enclosure: explosionproof
+    voltage: 110
+    phase: single
+    current_type: ac
+    frequency_dependent: true
+    layout: single_phase
+    expected_rows: 10
+
+  - code: xp_220_1ph
+    part_number_suffix: "30-11320000/A"
+    title: "220V - Single Phase Power"
+    page: 4
+    position: bottom
+    enclosure: explosionproof
+    voltage: 220
+    phase: single
+    current_type: ac
+    frequency_dependent: true
+    layout: single_phase
+    expected_rows: 10

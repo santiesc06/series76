@@ -1,0 +1,38 @@
+# Human decisions for cells where the two extraction models disagreed.
+# Each entry was checked against data/raw/series_76_electric_data.pdf (page renders: data/interim/pages/).
+# `field` is the column key from backend/ingest/layouts.py, or `footnote_marker` (true/false) for the "*".
+#
+# Extraction run of 2026-11-07: A = gemini-3.5-flash, B = anthropic/claude-haiku-5.5.
+
+resolutions:
+  # Page 2, 220V 3-phase: the merged "N/A" area spans every column of these rows, Motor Power
+  # included. Model A read "N/A"; model B left the cell empty.
+  - table: wp_220_3ph
+    part_number: 761A00-11330C00/A
+    field: motor_power_w
+    value: "N/A"
+    note: "page 2: N/A area covers the Motor Power column"
+  - table: wp_220_3ph
+    part_number: 761B00-11330C00/A
+    field: motor_power_w
+    value: "N/A"
+    note: "page 2: N/A area covers the Motor Power column"
+  - table: wp_220_3ph
+    part_number: 762A00-11330C00/A
+    field: motor_power_w
+    value: "N/A"
+    note: "page 2: N/A area covers the Motor Power column"
+  - table: wp_220_3ph
+    part_number: 762B00-11330C00/A
+    field: motor_power_w
+    value: "N/A"
+    note: "page 2: N/A area covers the Motor Power column"
+
+  # Page 4, explosionproof 110V: the merged "90" cell spans only 763Y30 and 764X30; the row
+  # separator under 764X30 runs through the Motor Power column, so 764Y30 is in the "180" cell.
+  # Model A read 90, model B read 180.
+  - table: xp_110_1ph
+    part_number: 764Y30-11300000/A
+    field: motor_power_w
+    value: "180"
+    note: "page 4 top table: merged-cell boundary below 764X30"
