@@ -24,8 +24,12 @@ Technical assessment (Konecto, AI Engineer). Requirements and acceptance criteri
 - Tests: `uv run pytest`
 - Lint/format: `uv run ruff check . && uv run ruff format --check .`
 - Run API locally: `uv run uvicorn app.main:app --reload`
-- DB only: `docker compose up -d db` (from repo root)
+- DB only: `docker compose --env-file .env.example up -d db` (from repo root; `--env-file .env.example` keeps Compose from reading `.env`)
+- Migrations / data load on the dev DB without reading `.env`: `APP_DISABLE_DOTENV=1 uv run alembic upgrade head` and `APP_DISABLE_DOTENV=1 uv run python -m ingest load`
+- Tests set `APP_DISABLE_DOTENV=1` themselves (`tests/conftest.py`) and use the `series76_test` database.
 
 ## Conventions
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`), feature branches, PRs into `main`.
 - Record every design decision with its trade-off in `docs/design.md` as it is made (no separate ADR files, decision P2).
+- Refer to requirements and decisions by ID (US-xx, ACn, NFR-xx, D-x, A1/B3/…; legend in `docs/requirements.md` → "ID conventions") and tag tests with the criterion they prove (`# US-10 AC1`).
+- Decisions marked ✅ in `docs/design.md` / `docs/requirements.md` were approved by the user. If implementation shows one should change, stop and ask before changing it; never deviate first and document afterwards.

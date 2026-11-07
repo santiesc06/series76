@@ -1,5 +1,6 @@
 """Application settings, read from environment variables (and `.env` for local runs)."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -41,4 +42,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    # APP_DISABLE_DOTENV=1 ignores .env entirely (tests, CI, tooling that must not see secrets):
+    # only real environment variables and the defaults above are used.
+    if os.environ.get("APP_DISABLE_DOTENV") == "1":
+        return Settings(_env_file=None)
     return Settings()

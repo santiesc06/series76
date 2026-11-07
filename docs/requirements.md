@@ -7,6 +7,22 @@ Example values come from `series_76_electric_data.pdf` (the only source of truth
 **Priority** (MoSCoW): **Must** = required by the assessment · **Should** = expected for a robust, general
 solution · **Could** = only if time allows.
 
+## ID conventions
+
+Every requirement and decision has a short ID, so code, tests and discussions can point to it
+(tests carry comments like `# US-10 AC1`).
+
+| Prefix | Meaning | Defined in | Example |
+|---|---|---|---|
+| **US-xx** | User story: what a user needs | this document | US-10 "Know when no model meets my requirements" |
+| **ACn** | Acceptance criterion: a testable condition inside a story | this document, under each story | US-10 AC1 |
+| **NFR-xx** | Non-functional requirement: a quality rule, not a feature | this document | NFR-01 numbers come only from the database |
+| **D-x** | Data interpretation decision: how ambiguous parts of the PDF are read | this document | D-1 3-phase ratings apply to both services |
+| **A, B, C, M, Q, P + n** | Technical design decision, by area: **A** data, **B** agent, **C** API, **M** mobile, **Q** quality, **P** delivery | `design.md` | B3 the LLM refers to products only by part number |
+
+Decisions marked ✅ are approved. Changing an approved decision requires asking first, and the change is
+recorded next to the original with its date and reason.
+
 ## Personas
 
 | Persona | Who | Goal |
@@ -31,6 +47,7 @@ The tables leave some things open. These decisions are applied everywhere and ex
 | D-2b | The markings define *where* a model may be used: `Class I, Division 1, Groups C, D; T4`, `Ex d IIB T4 Gb`, `Class I, Zone 1, AEx d IIB T4 Gb`. | Store them as **structured fields** (divisions, zones, NEC gas groups, IEC gas groups, temperature class, dust rating) from a hand-reviewed table metadata file. Hazardous-area suitability is a **deterministic filter**, like torque. |
 | D-2c | Some hazardous areas are **not** covered by the markings: Zone 0, NEC Groups A/B, IEC group IIC (hydrogen, acetylene), and dust (no Class II / Group III marking), although the summary mentions "gases or dust". | **Conservative default:** anything not explicitly in the marking is "not listed in the data for this model, verify with the manufacturer", never "yes". Dust suitability is never claimed. |
 | D-2d | Explaining a marking can involve numbers that are not in the PDF (e.g. what temperature T4 means). | The agent names the class (`T4`) without stating numbers from memory (NFR-01). A reviewed glossary served by a tool is a possible later extension. |
+| D-2e | The markings name the most demanding area covered (Zone 1, Division 1, gas group IIB), not the less demanding ones. | **Standard hierarchy applies** (decided 2026-11-07, option A): equipment marked for Zone 1 is also suitable for Zone 2, Division 1 for Division 2, and group IIB covers IIA (NEC 500/505, IEC 60079). This is interpretation, stated as such in every answer. It refines D-2c: Zone 0, IIC / Groups A–B and dust remain "not covered". |
 | D-3 | Torque is given in in-lbs **and** Nm, and the two columns are rounded (700 in-lbs is listed as 80 Nm). | Filter on the column of the unit the user asked for. Never show a converted value as if it came from the table. |
 | D-4 | The notes allow a motor voltage tolerance of ±10%. | Map nearby nominal voltages to table voltages within ±10% (120V → 110V, 230V/240V → 220V) and say so. Out of tolerance (e.g. 480V) means no match. |
 | D-5 | Speed and current depend on frequency for AC models; the 24V tables have one value. | If the user gives no frequency, show both 60 Hz and 50 Hz; **filter** on 60 Hz and state that assumption. 24V values are frequency independent. |

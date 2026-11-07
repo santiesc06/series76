@@ -15,11 +15,16 @@ def clean_part_number(raw: str) -> tuple[str, bool]:
     return text.rstrip(FOOTNOTE_MARKER), marked
 
 
+FULL_KEY_LENGTH = 14  # 763B00-11300000/A -> 763B0011300000
+
+
 def match_key(part_number: str) -> str:
-    """Key used to match user input to part numbers: no spaces, dashes, slashes or '/A' suffix."""
-    text = re.sub(r"[\s*]", "", part_number).upper()
-    text = re.sub(r"/A$", "", text)
-    return re.sub(r"[-/]", "", text)
+    """Key used to match user input to part numbers: letters and digits only, upper case, without
+    the trailing revision letter ('/A', ' A' or 'A' after a full 14-character number)."""
+    text = re.sub(r"[^0-9A-Za-z]", "", part_number).upper()
+    if len(text) == FULL_KEY_LENGTH + 1 and text.endswith("A"):
+        text = text[:-1]
+    return text
 
 
 def parse_value(raw: object) -> float | int | str | None:

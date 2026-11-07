@@ -3,9 +3,9 @@ name: backend-ci
 on:
   push:
     branches: [main]
-    paths: ["backend/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "data/**", ".github/workflows/backend-ci.yml"]
   pull_request:
-    paths: ["backend/**", "data/processed/**", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "data/**", ".github/workflows/backend-ci.yml"]
 
 jobs:
   lint-and-test:
@@ -13,6 +13,27 @@ jobs:
     defaults:
       run:
         working-directory: backend
+
+    services:
+      # Real PostgreSQL: catalog and repository tests run against the same engine as production.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: series76
+          POSTGRES_PASSWORD: series76
+          POSTGRES_DB: series76
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U series76"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      APP_DISABLE_DOTENV: "1"
+      TEST_DATABASE_URL: postgresql+psycopg://series76:series76@localhost:5432/series76_test
+      REQUIRE_DB: "1"  # fail (not skip) if the database is unreachable
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,5 +51,5 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Tests
-        # Unit tests never call the LLM (budget-capped key); no secrets needed here.
+        # Tests never call the LLM (budget-capped key); no secrets are needed here.
         run: uv run pytest -q
