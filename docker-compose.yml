@@ -16,7 +16,35 @@ services:
       timeout: 3s
       retries: 20
 
-  # backend: added in Phase 5 (Dockerfile + migrations + data load on start)
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    # Only these variables reach the container. Compose reads their values from .env (or the shell).
+    # The image never contains .env, and APP_DISABLE_DOTENV=1 inside it ignores any .env file.
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-series76}:${POSTGRES_PASSWORD:-series76}@db:5432/${POSTGRES_DB:-series76}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-anthropic/claude-haiku-5.5}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1024}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-30}
+      MAX_TOOL_ITERATIONS: ${MAX_TOOL_ITERATIONS:-6}
+      LLM_PRICE_INPUT_PER_M: ${LLM_PRICE_INPUT_PER_M:-0.10}
+      LLM_PRICE_OUTPUT_PER_M: ${LLM_PRICE_OUTPUT_PER_M:-0.50}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HISTORY_WINDOW: ${HISTORY_WINDOW:-12}
+      DEBUG_ENDPOINTS: ${DEBUG_ENDPOINTS:-true}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
 
 volumes:
   pgdata:
