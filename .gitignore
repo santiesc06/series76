@@ -1,0 +1,40 @@
+# Secrets
+.env
+*.env
+!.env.example
+
+# Assessment instructions (not part of the deliverable)
+data/raw/assessment-en.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Ingestion scratch output (raw model responses, page renders)
+data/interim/
+
+# Android / Kotlin
+mobile/**/build/
+mobile/.gradle/
+mobile/local.properties
+mobile/.idea/
+mobile/**/*.iml
+mobile/captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Claude Code: commit settings.json / CLAUDE.md, keep personal overrides local
+.claude/settings.local.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/

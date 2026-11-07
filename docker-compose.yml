@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-series76}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-series76}
+      POSTGRES_DB: ${POSTGRES_DB:-series76}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-series76} -d ${POSTGRES_DB:-series76}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # backend: added in Phase 5 (Dockerfile + migrations + data load on start)
+
+volumes:
+  pgdata:
