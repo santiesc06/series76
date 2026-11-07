@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only. Cleartext is allowed for any host so the app can reach the backend on the
+     emulator's host alias (10.0.2.2) or on a computer's LAN address from a physical device. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- Intentional (design M4): debug only, for a local development backend. -->
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
+</network-security-config>

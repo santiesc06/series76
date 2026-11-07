@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only (design M4, A9): reach a backend on the developer's machine or LAN.
+     - Plain HTTP (network security config); release builds keep the platform default (HTTPS only).
+     - ACCESS_LOCAL_NETWORK: since Android 17 (API 37) apps need it to connect to private
+       addresses such as the emulator's host alias 10.0.2.2; without it connections time out. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
