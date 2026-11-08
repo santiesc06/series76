@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Developer-only endpoint with tool calls and token usage (design C2). On by default so the
     # app's debug screen works out of the box; turn off in production.
     debug_endpoints: bool = True
+    auth_token_ttl_hours: int = 168  # login tokens expire after 7 days (design U1)
 
     # Optional Langfuse tracing (design Q6): off unless both keys are set.
     langfuse_public_key: str = ""

@@ -5,6 +5,7 @@ description = "Series 76 Technical Assistant: FastAPI + LangChain agent over the
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
     "fastapi>=0.162.0",
     "langchain>=1.4.9",
     "langchain-openai>=1.7.4",

@@ -6,6 +6,7 @@ Catalog, normalized the way the PDF is shaped:
   ratings (111)       one row per part and service: torque, duty cycle, cycles/starts per hour
 
 Conversations: sessions + messages (payload = what the user saw, debug = what the agent did).
+Login (US-21): users + auth_tokens (only a hash of each token is stored, design U1).
 """
 
 import uuid
@@ -99,11 +100,37 @@ class Rating(Base):
     part: Mapped[Part] = relationship(back_populates="ratings")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(254), unique=True)  # stored lower-case
+    name: Mapped[str] = mapped_column(String(80))
+    password_hash: Mapped[str] = mapped_column(String(255))  # argon2id (design U2)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # SHA-256 hex
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()
+
+
 class ChatSession(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[str | None] = mapped_column(String(64), index=True)  # login-ready (C6)
+    # Owner (US-21, design U3). NULL only for conversations created before login existed.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     title: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(

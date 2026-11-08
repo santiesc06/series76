@@ -1,0 +1,12 @@
+[
+  {
+    "email": "alice@series76.test",
+    "name": "Alice (test user)",
+    "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$pcaS/5yhbRuCgFmcb0Hk6g$HSmRA7MS00ea6oW7fYD3k/5qPtKpVWwLISTEr/mCHnk"
+  },
+  {
+    "email": "bob@series76.test",
+    "name": "Bob (test user)",
+    "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$2nRfcmPIXws2+ECveC1lzQ$3KaiqvndtGMdD98EjOv+oov1yWnrSuNsIsW9z4JYqUE"
+  }
+]
