@@ -24,13 +24,29 @@ def _values(card, group_key, spec_key):
 
 
 def test_single_phase_card_has_both_services_and_frequency_conditions(db):
-    card = _card(db, "763B00-11300000/A", highlight=["torque"])
+    card = _card(db, "763B00-11300000/A", highlight=["on_off.torque"])
     assert [g["key"] for g in card["spec_groups"]] == ["on_off", "modulating", "electrical"]
     assert _values(card, "electrical", "speed") == [
         {"value": 26, "unit": "s", "condition": "60 Hz"},
         {"value": 32, "unit": "s", "condition": "50 Hz"},
     ]
-    assert card["highlight"] == ["torque"]
+    assert card["highlight"] == ["on_off.torque"]
+
+
+def test_highlight_only_the_requested_service():  # US-07 AC3: services are never mixed
+    from app.services.presentation import highlights_for
+
+    assert highlights_for({"min_torque": 500, "service": "modulating"}) == [
+        "modulating.torque",
+        "both.torque",
+    ]
+    assert highlights_for({"min_torque": 500}) == [
+        "on_off.torque",
+        "modulating.torque",
+        "both.torque",
+    ]
+    assert highlights_for({"max_speed_s": 20, "voltage": 110}) == ["electrical.speed"]
+    assert highlights_for(None) == []
 
 
 def test_24v_card_shows_one_frequency_independent_value(db):  # US-11 AC4

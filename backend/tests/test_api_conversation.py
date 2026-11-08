@@ -148,7 +148,8 @@ def test_no_match_shows_labelled_alternatives(chat):  # US-10
     body = r.json()
     assert body["status"] == "no_match" and body["view"] == "cards"
     alternative = body["alternatives"][0]
-    assert "torque" in alternative["match_note"] and alternative["highlight"] == ["torque"]
+    assert "torque" in alternative["match_note"]
+    assert alternative["highlight"] == ["on_off.torque", "modulating.torque", "both.torque"]
 
 
 def test_history_and_sessions_list_allow_resuming(chat):  # US-15, US-16

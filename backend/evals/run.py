@@ -61,7 +61,9 @@ def run_case(engine, model, case: dict) -> dict:
                 )
             except AgentError as exc:
                 record["error"] = exc.code
-                record["checks"] = [("completed", False, f"agent error: {exc.code}")]
+                record["error_detail"] = exc.detail  # e.g. which FinalAnswer fields failed (B3a)
+                reason = f"agent error: {exc.code}" + (f" ({exc.detail})" if exc.detail else "")
+                record["checks"] = [("completed", False, reason)]
                 turns.append(record)
                 break
             session_id = response["session_id"]
