@@ -16,6 +16,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
+from pydantic import ValidationError
 
 from app.agent.schemas import FinalAnswer
 
@@ -23,10 +24,55 @@ PROMPT_PATH = Path(__file__).parent / "prompts" / "system.md"
 
 
 class AgentError(RuntimeError):
-    def __init__(self, code: str, message: str):
+    """`message` is shown to the user; `detail` goes to the server log only."""
+
+    def __init__(self, code: str, message: str, detail: str | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.detail = detail
+
+
+# Sent back to the model when its FinalAnswer call is invalid (design B3a). Plainer than the raw
+# pydantic error, and it names the mistake seen in practice: fields written as XML inside
+# answer_text, so required fields such as `status` go missing.
+RETRY_MESSAGE = (
+    "Your FinalAnswer call was invalid ({problem}). Call FinalAnswer again with every field as "
+    "its own JSON argument; `status` is required. Do not write <parameter> tags or other fields "
+    "inside answer_text."
+)
+
+
+class FinalAnswerErrors:
+    """Turns each invalid FinalAnswer into a retry message and remembers it for the log."""
+
+    def __init__(self) -> None:
+        self.problems: list[str] = []
+
+    def __call__(self, exc: Exception) -> str:
+        problem = _describe(exc)
+        self.problems.append(problem)
+        return RETRY_MESSAGE.format(problem=problem)
+
+    def summary(self) -> str | None:
+        if not self.problems:
+            return None
+        return f"{len(self.problems)} invalid FinalAnswer call(s); last: {self.problems[-1]}"
+
+
+def _describe(exc: Exception) -> str:
+    """Short, content-free description: which fields failed and why (no user text)."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ValidationError):
+            return "; ".join(
+                f"{'.'.join(str(part) for part in error['loc']) or 'arguments'}: {error['type']}"
+                for error in current.errors()
+            )
+        current = getattr(current, "source", None) or current.__cause__ or current.__context__
+    return type(exc).__name__
 
 
 @dataclass
@@ -37,6 +83,7 @@ class AgentRun:
     output_tokens: int = 0
     model_calls: int = 0
     tool_names: list[str] = field(default_factory=list)
+    format_retries: int = 0  # invalid FinalAnswer calls the model had to redo (B3a)
 
 
 @lru_cache
@@ -52,11 +99,12 @@ def run_agent(
     max_tool_iterations: int,
     run_config: dict | None = None,
 ) -> AgentRun:
+    format_errors = FinalAnswerErrors()
     agent = create_agent(
         model,
         tools,
         system_prompt=system_prompt,
-        response_format=ToolStrategy(FinalAnswer),
+        response_format=ToolStrategy(FinalAnswer, handle_errors=format_errors),
     )
     # Each tool iteration is two graph steps (model, tools); +3 for the final answer.
     # run_config adds optional tracing callbacks and metadata (design Q6).
@@ -65,7 +113,9 @@ def run_agent(
         output = agent.invoke({"messages": messages}, config)
     except GraphRecursionError as exc:
         raise AgentError(
-            "agent_step_limit", "The assistant could not finish this request in time."
+            "agent_step_limit",
+            "The assistant could not finish this request in time.",
+            detail=format_errors.summary() or "tool step limit reached",
         ) from exc
     except openai.APIStatusError as exc:
         if exc.status_code == 402:
@@ -82,9 +132,15 @@ def run_agent(
 
     answer = output.get("structured_response")
     if not isinstance(answer, FinalAnswer):
-        raise AgentError("agent_no_answer", "The assistant did not produce an answer.")
+        raise AgentError(
+            "agent_no_answer",
+            "The assistant did not produce an answer.",
+            detail=format_errors.summary(),
+        )
 
-    run = AgentRun(answer=answer, messages=output["messages"])
+    run = AgentRun(
+        answer=answer, messages=output["messages"], format_retries=len(format_errors.problems)
+    )
     for message in run.messages:
         if isinstance(message, AIMessage):
             run.model_calls += 1

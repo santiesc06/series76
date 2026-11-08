@@ -354,6 +354,7 @@ def handle_turn(
             "estimated_cost_usd": round(cost, 6),
             "tools": [c.tool for c in recorder.calls],
             "number_check": check["status"],
+            "format_retries": sum(r.format_retries for r in state.runs),
             "status": answer.status,
         },
     )
