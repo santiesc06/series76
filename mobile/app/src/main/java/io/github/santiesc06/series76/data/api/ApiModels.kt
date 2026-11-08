@@ -105,6 +105,14 @@ data class SessionMessages(
     val messages: List<HistoryMessage>,
 )
 
+// Voice message transcript (US-22).
+@Serializable
+data class TranscribeResponse(
+    val text: String,
+    val language: String,
+    @SerialName("duration_s") val durationS: Double,
+)
+
 // Login (US-21, design U1/U4).
 @Serializable
 data class LoginRequest(val email: String, val password: String)

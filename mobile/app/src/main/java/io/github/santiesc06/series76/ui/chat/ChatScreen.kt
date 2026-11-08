@@ -1,5 +1,10 @@
 package io.github.santiesc06.series76.ui.chat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.SystemClock
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -31,12 +36,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +59,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -57,15 +67,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.santiesc06.series76.R
+import io.github.santiesc06.series76.data.AppError
+import io.github.santiesc06.series76.data.voice.MAX_RECORDING_MS
 import io.github.santiesc06.series76.ui.common.ErrorState
 import io.github.santiesc06.series76.ui.common.LoadingState
+import kotlinx.coroutines.delay
 
 /** Example questions shown in an empty chat; tapping one sends it. */
 private val EXAMPLES = listOf(
@@ -84,6 +104,23 @@ fun ChatScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    // Voice (US-22): a finished transcript goes into the box to review before sending (V1).
+    LaunchedEffect(state.transcript) {
+        val text = state.transcript ?: return@LaunchedEffect
+        input = (if (input.isBlank()) text else "${input.trimEnd()} $text").take(MAX_QUERY_LENGTH)
+        viewModel.transcriptConsumed()
+    }
+    val context = LocalContext.current
+    val askMicrophone = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) viewModel.startRecording() else viewModel.microphoneDenied() }
+    val onMic = {
+        val permission = Manifest.permission.RECORD_AUDIO
+        val granted = ContextCompat.checkSelfPermission(context, permission) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) viewModel.startRecording() else askMicrophone.launch(permission)
+    }
 
     // Keep the newest message (or the typing indicator) in view.
     LaunchedEffect(state.items.size, state.sending) {
@@ -117,6 +154,12 @@ fun ChatScreen(
                     viewModel.send(input)
                     input = ""
                 },
+                voice = state.voice,
+                voiceError = state.voiceError,
+                onMic = onMic,
+                onFinishRecording = viewModel::finishRecording,
+                onCancelRecording = viewModel::cancelRecording,
+                onDismissVoiceError = viewModel::dismissVoiceError,
             )
         },
     ) { padding ->
@@ -338,26 +381,117 @@ private fun InputBar(
     onValueChange: (String) -> Unit,
     enabled: Boolean,
     onSend: () -> Unit,
+    voice: VoiceState,
+    voiceError: AppError?,
+    onMic: () -> Unit,
+    onFinishRecording: () -> Unit,
+    onCancelRecording: () -> Unit,
+    onDismissVoiceError: () -> Unit,
 ) {
-    val canSend = enabled && value.isNotBlank()
+    val idle = voice == VoiceState.Idle
+    val canSend = enabled && idle && value.isNotBlank()
     Surface(tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                enabled = enabled,
-                placeholder = { Text("Ask about an actuator…") },
-                maxLines = 4,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onSend, enabled = canSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (voiceError != null) VoiceErrorRow(voiceError.message, onDismissVoiceError)
+            if (voice is VoiceState.Recording) {
+                RecordingRow(voice.startedAtMs, onCancelRecording, onFinishRecording)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = enabled && idle,
+                        placeholder = {
+                            Text(if (idle) "Ask about an actuator…" else "Transcribing your message…")
+                        },
+                        maxLines = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
+                        modifier = Modifier.weight(1f),
+                    )
+                    when {
+                        voice == VoiceState.Transcribing -> CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(12.dp).size(24.dp),
+                        )
+                        // Empty box: dictate instead of typing (US-22 AC1). With text: send it.
+                        value.isBlank() -> IconButton(onClick = onMic, enabled = enabled) {
+                            Icon(
+                                painterResource(R.drawable.ic_mic),
+                                contentDescription = "Voice message",
+                            )
+                        }
+                        else -> IconButton(onClick = onSend, enabled = canSend) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+/** Shown while recording: elapsed time against the 60 s limit, cancel and done (US-22 AC1). */
+@Composable
+private fun RecordingRow(startedAtMs: Long, onCancel: () -> Unit, onDone: () -> Unit) {
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(startedAtMs) {
+        while (true) {
+            now = SystemClock.elapsedRealtime()
+            delay(250)
+        }
+    }
+    val seconds = ((now - startedAtMs) / 1000).coerceIn(0, MAX_RECORDING_MS / 1000L)
+    val pulse by rememberInfiniteTransition(label = "rec").animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+        label = "recDot",
+    )
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel recording")
+        }
+        Box(
+            Modifier
+                .padding(start = 4.dp, end = 10.dp)
+                .size(12.dp)
+                .alpha(pulse)
+                .background(MaterialTheme.colorScheme.error, CircleShape),
+        )
+        Text(
+            "Recording  %d:%02d / 1:00".format(seconds / 60, seconds % 60),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        FilledIconButton(onClick = onDone) {
+            Icon(Icons.Filled.Check, contentDescription = "Stop and transcribe")
+        }
+    }
+}
+
+/** A voice problem with an icon, not color alone (M6); typing keeps working (US-22 AC6). */
+@Composable
+private fun VoiceErrorRow(message: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        TextButton(onClick = onDismiss) { Text("OK") }
     }
 }
