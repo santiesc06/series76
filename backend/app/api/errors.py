@@ -41,7 +41,7 @@ def register(app: FastAPI) -> None:
 
     @app.exception_handler(AgentError)
     async def agent_failed(_: Request, exc: AgentError) -> JSONResponse:
-        log.warning("agent error", extra={"code": exc.code})
+        log.warning("agent error", extra={"code": exc.code, "detail": exc.detail})
         return error_response(AGENT_STATUS.get(exc.code, 502), exc.code, exc.message)
 
     @app.exception_handler(LLMNotConfiguredError)
