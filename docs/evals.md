@@ -107,14 +107,35 @@ the case either adds the supply or accepts a clarifying question too (design E4)
 
 ## Model comparison
 
-Not run yet (deferred until after the app, 2026-11-07). The candidates have the same tool-calling
-support and are priced in `backend/evals/models.yaml`:
+Same 34 cases, same code and prompt, one run per model (2026-11-08). The candidates have the same
+tool-calling support and are priced in `backend/evals/models.yaml`:
 
-| Model | Price in / out (USD per 1M) | Result |
-|---|---|---|
-| `anthropic/claude-haiku-5.5` (shipped) | 0.10 / 0.50 | 34/34, USD 0.049 per run |
-| `openai/gpt-6-luna` | 0.10 / 0.50 | pending |
-| `openai/gpt-oss-120b` | 0.15 / 0.60 | pending |
+| Model | Price in / out (USD per 1M) | Cases | Checks | Cost (USD) | Median latency |
+|---|---|---|---|---|---|
+| `anthropic/claude-haiku-5.5` (shipped) | 0.10 / 0.50 | **34/34** | 256/256 | 0.049 | 2.5 s |
+| `openai/gpt-6-luna` | 0.10 / 0.50 | 33/34 | 255/256 | **0.027** | 2.7 s |
+| `openai/gpt-oss-120b` | 0.15 / 0.60 | 12/34 | 112/136 | 0.027\* | 3.9 s |
+
+\* Undercounted: the 22 turns that ended in an error spent tokens the runner does not record.
+
+- **gpt-6-luna, `spanish-lookup-and-followup`:** asked "¿y cuánta potencia consume?" after a
+  lookup, it answered correctly in Spanish ("90 W", from the tool) but left `product_refs` empty, so
+  the app would show the sentence without the product card. The same follow-up in English
+  (`followup-power`) passed. A display miss, not a wrong number.
+- At the same list price gpt-6-luna cost about half as much per run, because the same prompts
+  counted as fewer tokens (235k input / 6k output against Haiku's 420k / 14k): a different
+  tokenizer and shorter answers.
+- **gpt-oss-120b, 22 cases:** the agent ended without an answer (`agent_no_answer`): the model
+  stopped without calling the `FinalAnswer` structured-output tool, most likely replying in plain
+  text. The API would return its generic error for these.
+- **gpt-oss-120b, answers it did give:** it wrote part numbers with Unicode non-breaking hyphens
+  ("763B00‑11300000/A"), so the number check did not recognize them as part numbers and read
+  "11300000" as an invented value (a repair in `followup-power`, the fallback sentence in
+  `hazardous-wording-means-explosionproof`). It also left `product_refs` empty on follow-ups, and
+  for "the same model at 220V" it looked up the 110V part again and said no 220V version exists
+  (the catalog has 763B00-11320000/A).
+- **Decision:** keep `anthropic/claude-haiku-5.5`. It is the only model with a clean run;
+  gpt-6-luna is a viable cheaper fallback; gpt-oss-120b is not usable with this agent as built.
 
 ## Limitations
 
