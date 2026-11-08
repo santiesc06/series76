@@ -464,11 +464,7 @@ docs/
   design.md              every design decision with its trade-off, known limitations
   evals.md               eval results
   design/theme/          Material Theme Builder export (seed #C25E00)
-.claude/                 Claude Code configuration used to build this project (CLAUDE.md)
+.claude/                 AI assistant configuration (CLAUDE.md)
 docker-compose.yml       database + backend
 .env.example             all configuration, with placeholders
 ```
-
-The project was built with Claude Code. `.claude/CLAUDE.md` holds the project rules it worked under
-(numbers only from the database, never read `.env`, record every decision in `docs/design.md`, ask
-before changing an approved decision).
