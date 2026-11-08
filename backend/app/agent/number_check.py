@@ -8,7 +8,7 @@ Excluded from the check: part numbers and model codes (763B00-11300000/A, 761A),
 and size codes without a unit ("Series 76", "sizes 766 and 767"), digits glued to letters
 (S4, T4, IIB), and bare small integers up to 10, which are counts and ordinals ("2 models",
 "Zone 1"). A small integer followed by a unit ("5 A", "8 starts") is a spec value and is checked
-(design B4b).
+(design B4b). Unicode dashes and spaces are read as their ASCII forms first (design B4a″).
 """
 
 import json
@@ -31,6 +31,15 @@ UNIT_RE = re.compile(
 )
 # Numbers that appear in the field definitions of the system prompt (90-degree turn, 50/60 Hz).
 PROMPT_NUMBERS = {90.0, 50.0, 60.0}
+# Look-alike dashes and spaces some models write (a non-breaking hyphen U+2011 inside part numbers,
+# U+202F before units), mapped to ASCII so the patterns above match (eval comparison 2026-11-08).
+_DASHES = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe63\uff0d"
+_SPACES = "\u00a0\u2007\u2009\u200a\u202f\u205f\u3000"
+_ASCII = str.maketrans({**dict.fromkeys(_DASHES, "-"), **dict.fromkeys(_SPACES, " ")})
+
+
+def _normalize(text: str) -> str:
+    return text.translate(_ASCII)
 
 
 def _candidates(token: str) -> set[float]:
@@ -46,7 +55,7 @@ def _candidates(token: str) -> set[float]:
 
 
 def numbers_in_text(text: str) -> list[tuple[str, set[float]]]:
-    text = PART_RE.sub(" ", text)
+    text = PART_RE.sub(" ", _normalize(text))
     return [(m.group(0), _candidates(m.group(0))) for m in NUMBER_RE.finditer(text)]
 
 
@@ -79,7 +88,7 @@ def allowed_numbers(*sources: object) -> set[float]:
 
 def unsupported_numbers(text: str, allowed: set[float]) -> list[str]:
     """Numbers in `text` that no tool returned this turn."""
-    text = PART_RE.sub(" ", text)
+    text = PART_RE.sub(" ", _normalize(text))
     problems = []
     for match in NUMBER_RE.finditer(text):
         token = match.group(0)
