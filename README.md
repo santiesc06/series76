@@ -222,6 +222,9 @@ requests it (design A9).
 
 ### Screens
 
+- **Login:** email and password of a test user ([§9](#9-optional-features)). The app remembers the
+  session across restarts; when the token expires or is revoked it returns here with "Your session
+  expired". **Log out** is in the account menu (top right of Conversations).
 - **Conversations:** saved conversations, newest first; pull to refresh; **New conversation**.
 - **Chat:** answer text plus **product cards** (part number, enclosure, power supply, specs grouped by
   service with units and 60/50 Hz conditions, certifications). 2+ products can be compared **side by
@@ -317,7 +320,7 @@ All models are configurable through environment variables.
 ```bash
 cd backend
 uv sync
-uv run pytest                                        # 144 tests, no LLM calls, own database series76_test
+uv run pytest                                        # 165 tests, no LLM calls, own database series76_test
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -342,7 +345,7 @@ numbers or part numbers). Results: [`docs/evals.md`](docs/evals.md); raw runs in
 
 ```bash
 cd mobile
-./gradlew testDebugUnitTest lintDebug                # Windows: gradlew.bat
+./gradlew testDebugUnitTest lintDebug                # 12 tests; Windows: gradlew.bat
 ```
 
 ---
@@ -351,7 +354,8 @@ cd mobile
 
 | Feature | Status |
 |---|---|
-| Login (US-21) | **Backend implemented** (app screen in progress). Email and password return an opaque token (7 days, `AUTH_TOKEN_TTL_HOURS`); the database stores only its SHA-256 hash, so logout revokes it at once. Passwords are stored as argon2id hashes. Every `/api/*` route except login needs `Authorization: Bearer <token>`, and each user sees only their own conversations. Design U1–U7. |
+| Login (US-21) | **Implemented** (backend and app). Email and password return an opaque token (7 days, `AUTH_TOKEN_TTL_HOURS`); the database stores only its SHA-256 hash, so logout revokes it at once. Passwords are stored as argon2id hashes. Every `/api/*` route except login needs `Authorization: Bearer <token>`, and each user sees only their own conversations. The app keeps the token in DataStore (excluded from backup) and goes back to the login screen on any 401. Design U1–U7. |
+| Langfuse tracing (extra) | **Implemented, off by default.** Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and `LANGFUSE_HOST` for the US region) to trace every turn (LLM calls, tool calls, tokens, latency) to Langfuse Cloud, grouped by conversation and tagged `api` or `eval`. Tracing errors never affect an answer. |
 | Voice messages (US-22) | **Not implemented.** |
 
 **Test users** (created on every start from `backend/app/auth/seed_users.json`, which holds only
@@ -364,7 +368,6 @@ the hashes). These are test credentials for this demo, not secrets:
 
 Not implemented (not required by the assessment): sign-up, password reset, refresh tokens, login rate
 limiting.
-| Langfuse tracing (extra) | **Implemented, off by default.** Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and `LANGFUSE_HOST` for the US region) to trace every turn (LLM calls, tool calls, tokens, latency) to Langfuse Cloud, grouped by conversation and tagged `api` or `eval`. Tracing errors never affect an answer. |
 
 ---
 
@@ -374,6 +377,7 @@ limiting.
 |---|---|
 | Port 8000 (or 5433) already in use | Set `API_PORT` (or `POSTGRES_PORT`) in `.env`, run `docker compose up -d`, and update `api.baseUrl` in `mobile/local.properties`. |
 | App shows "The server took too long to answer" | Tap **Allow** on the Android 17 "nearby devices" prompt (or enable it in the app's settings → Permissions); check the backend is running and `api.baseUrl` uses the right port. |
+| App goes back to the login screen with "Your session expired" | The token expired (7 days), was revoked by a logout, or the database was reset. Sign in again. |
 | App shows "Can't reach the server" | Backend not running, wrong `api.baseUrl`, or (physical phone) the computer's firewall blocks the port. |
 | Chat answers `llm_not_configured` (503) | `OPENROUTER_API_KEY` is empty in `.env`; set it and restart: `docker compose up -d`. |
 | Chat answers `llm_budget_exhausted` (502) | The OpenRouter key has no credit left. |

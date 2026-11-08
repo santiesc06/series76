@@ -233,4 +233,4 @@ Assessment §7: token login, hashed passwords, pre-loaded test users, `Authoriza
 | US-12, US-15, US-17, US-18, US-19 | Manual app check (README checklist) |
 | US-20 | Fresh clone test before delivery |
 | US-21 AC1–AC6, AC8 | Auth API tests (`tests/test_auth.py`) |
-| US-21 AC7 | Manual app check with two test users |
+| US-21 AC7 | `mobile/app/src/test/.../data/auth/AuthSessionTest.kt` (token header, 401 → expired, restart, logout) + manual app check with two test users |

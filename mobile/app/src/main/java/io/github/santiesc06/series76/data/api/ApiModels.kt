@@ -105,6 +105,20 @@ data class SessionMessages(
     val messages: List<HistoryMessage>,
 )
 
+// Login (US-21, design U1/U4).
+@Serializable
+data class LoginRequest(val email: String, val password: String)
+
+@Serializable
+data class UserOut(val id: String, val email: String, val name: String)
+
+@Serializable
+data class LoginResponse(
+    val token: String,
+    @SerialName("expires_at") val expiresAt: String,
+    val user: UserOut,
+)
+
 @Serializable
 data class ErrorBody(val code: String, val message: String)
 
