@@ -1,0 +1,91 @@
+{
+  "summary": {
+    "model": "anthropic/claude-haiku-5.5",
+    "date": "2026-11-08T19:15:59+00:00",
+    "cases_passed": 1,
+    "cases_total": 1,
+    "checks_passed": 6,
+    "checks_total": 6,
+    "cost_usd": 0.0012,
+    "median_latency_ms": 3707,
+    "wall_time_s": 4.4
+  },
+  "cases": [
+    {
+      "id": "out-of-scope-price",
+      "covers": [
+        "NFR-02"
+      ],
+      "passed": true,
+      "checks_passed": 6,
+      "checks_total": 6,
+      "cost_usd": 0.001226,
+      "turns": [
+        {
+          "query": "How much does 763B00-11300000/A cost?",
+          "answer": "I can't provide pricing: the Series 76 catalog contains only electrical and technical data, so cost and availability need to come from your supplier or sales contact. The 763B00-11300000/A is a weatherproof, 110V single-phase model with CSA, CE and UKCA certifications.",
+          "status": "out_of_scope",
+          "view": "cards",
+          "products": [
+            "763B00-11300000/A"
+          ],
+          "alternatives": [],
+          "quick_replies": [
+            "Show its torque and speed",
+            "Find similar 110V models"
+          ],
+          "tools": [
+            {
+              "tool": "lookup_part",
+              "args": {
+                "part_number": "763B00-11300000/A"
+              }
+            }
+          ],
+          "number_check": {
+            "status": "pass",
+            "unsupported": []
+          },
+          "tokens": {
+            "input": 10390,
+            "output": 375
+          },
+          "cost_usd": 0.001226,
+          "latency_ms": 3707,
+          "checks": [
+            [
+              "no_internals",
+              true,
+              ""
+            ],
+            [
+              "numbers_supported",
+              true,
+              ""
+            ],
+            [
+              "no_invented_parts",
+              true,
+              ""
+            ],
+            [
+              "language",
+              true,
+              ""
+            ],
+            [
+              "status",
+              true,
+              ""
+            ],
+            [
+              "answer_none",
+              true,
+              ""
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
