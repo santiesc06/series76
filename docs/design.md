@@ -269,6 +269,15 @@ Details the approved decisions (B1–B7, C1–C7) left open, decided while imple
 
 ---
 
+## 7e. Optional features plan (✅ user, 2026-11-07)
+
+| ID | Decision | Why / trade-off |
+|---|---|---|
+| O1 | **Order:** model comparison (fills the README's model-choice table), then login (US-21), then voice (US-22). | Cheapest and closest to a required item first; login is fully specified by the assessment. |
+| O2 | **Voice = Whisper on the backend:** the app records audio and sends it to a new transcription endpoint; the backend runs open-source **faster-whisper** (small model) on CPU. The transcript becomes a normal chat message. | Free and keyless, same quality on every phone, and it is the open-source route the assessment allows. Trade-off: the Docker image grows (model weights) and transcription takes a few seconds on CPU. Rejected: Android's built-in recognizer (device-dependent, may send audio to Google, not Whisper) and whisper.cpp in the app (native code and a large APK, too risky for the deadline). |
+
+---
+
 ## 8. Extraction run log
 
 | Date | Models | Result |
