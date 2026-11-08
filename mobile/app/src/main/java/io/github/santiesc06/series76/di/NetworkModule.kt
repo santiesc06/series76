@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.github.santiesc06.series76.BuildConfig
 import io.github.santiesc06.series76.data.api.Series76Api
+import io.github.santiesc06.series76.data.auth.AuthInterceptor
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -29,11 +30,13 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun okHttp(): OkHttpClient = OkHttpClient.Builder()
+    fun okHttp(auth: AuthInterceptor): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         // One agent turn takes ~3-8 s, up to ~30 s with a repair (design C3): no streaming.
         .readTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor(auth) // Bearer token on every request (US-21)
         .apply {
+            // BASIC logs the method, URL and status only, never headers, so no token in logcat.
             if (BuildConfig.DEBUG) {
                 addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC))
             }

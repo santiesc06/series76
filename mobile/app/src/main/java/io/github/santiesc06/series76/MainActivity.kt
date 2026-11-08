@@ -9,7 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
-import io.github.santiesc06.series76.navigation.AppNavHost
+import io.github.santiesc06.series76.navigation.AppRoot
 import io.github.santiesc06.series76.ui.theme.Series76Theme
 
 /** Android 17 (API 37) gates connections to private addresses behind this runtime permission. */
@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         askForLocalNetworkIfDeclared()
         setContent {
             Series76Theme {
-                AppNavHost()
+                AppRoot()
             }
         }
     }
