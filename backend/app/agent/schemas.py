@@ -26,8 +26,12 @@ class QuickReply(BaseModel):
 class FinalAnswer(BaseModel):
     """Your answer to the user for this turn. Always finish by calling this."""
 
-    # answer_text is last on purpose (design B3a): the model writes arguments in this order, so the
-    # short required fields are complete even if the long free text goes wrong.
+    # answer_text stays first (design B3a): writing the answer before choosing the status works as
+    # a short reasoning step. Putting it last was tried and misclassified out-of-scope questions.
+    answer_text: str = Field(
+        description="Short answer for the user (1-4 sentences) in the user's language. Only "
+        "numbers returned by a tool in this turn."
+    )
     status: Status
     view: View = Field("none", description="cards, comparison (2+ products) or none.")
     product_refs: list[str] = Field(
@@ -37,10 +41,6 @@ class FinalAnswer(BaseModel):
         default_factory=list, description="For no_match: alternative part numbers (max 3)."
     )
     quick_replies: list[QuickReply] = Field(default_factory=list, description="Max 5.")
-    answer_text: str = Field(
-        description="Short answer for the user (1-4 sentences) in the user's language. Only "
-        "numbers returned by a tool in this turn."
-    )
 
     @field_validator("answer_text")
     @classmethod

@@ -49,9 +49,9 @@ def lookups():
     return [tool_call("lookup_part", part_number=A), tool_call("lookup_part", part_number=B)]
 
 
-def test_answer_text_is_the_last_field_the_model_writes():  # B3a
+def test_answer_text_comes_before_status():  # B3a: answering first improves the status choice
     fields = list(FinalAnswer.model_json_schema()["properties"])
-    assert fields[0] == "status" and fields[-1] == "answer_text"
+    assert fields.index("answer_text") < fields.index("status")
 
 
 def test_leaked_markup_is_cut_from_the_answer_text():  # B3a
