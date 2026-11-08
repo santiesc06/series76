@@ -6,11 +6,14 @@ Android app with product cards whose every number comes from the manufacturer's 
 
 - **Backend:** Python 3.12, FastAPI, a LangChain agent with three custom tools over PostgreSQL.
 - **Data:** `series_76_electric_data.pdf` → verified JSON → PostgreSQL (68 parts, 111 ratings).
-- **App:** Kotlin + Jetpack Compose (Conversations, Chat and a developer-only Debug screen).
+- **App:** Kotlin + Jetpack Compose (Login, Conversations, Chat and a developer-only Debug screen).
+- **Optional features:** login with per-user conversations, and voice messages transcribed by
+  open-source Whisper on the backend ([§9](#9-optional-features)).
 - **Quality:** 186 backend tests and CI, plus 44 LLM eval cases (34 from the requirements, 10 robustness cases); 43/44 on the final run.
 
-Total OpenRouter spend for the whole project (extraction, development, evals): about **USD 0.15** of
-the USD 10 key.
+Total OpenRouter spend for the whole project: about **USD 0.5** of the USD 10 key (USD 0.41 for
+12 full or partial eval runs, USD 0.01 for the PDF extraction, the rest manual testing). Voice
+transcription runs locally and costs nothing.
 
 ---
 
@@ -214,10 +217,9 @@ The backend URL is a build setting, read from `mobile/local.properties` (not com
 api.baseUrl=http://10.0.2.2:8000/
 ```
 
-| Where the app runs | `api.baseUrl` |
-|---|---|
-| Android emulator, backend on the same computer | `http://10.0.2.2:<API_PORT>/` (default `http://10.0.2.2:8000/` if the line is absent) |
-| Physical phone on the same Wi-Fi | `http://<your computer's LAN IP>:<API_PORT>/` (allow the port in the computer's firewall) |
+`10.0.2.2` is the Android emulator's address for the computer it runs on. Use the port of your
+backend (`API_PORT`, default 8000); without the line the app uses `http://10.0.2.2:8000/`. The app
+was built and tested on the Android emulator.
 
 Press **Run** again after changing it (it is compiled into `BuildConfig`).
 
@@ -300,6 +302,19 @@ alternatives considered); known limitations are listed in its §9.
   database (the backend is the source of truth). Numbers are formatted like the datasheet
   ("4,400") with tabular figures.
 
+**Optional features**
+- **Login (U1–U7):** opaque random tokens stored only as SHA-256 hashes, so logout revokes at once
+  and no signing secret is needed; argon2id passwords. *Trade-off:* one indexed lookup per request
+  (a JWT avoids it but cannot be revoked early). The app keeps the token in DataStore, excluded from
+  backup but not encrypted by the app itself.
+- **Voice (O2, V1–V7):** Whisper on the backend instead of the phone's recognizer: same result on
+  every device, no key, no OpenRouter cost. The transcript goes into the message box to check
+  before sending, because part numbers are where speech recognition fails. *Trade-off:* a ~2 GB
+  image and ~4–5 s per question on a laptop CPU.
+- **Robustness rules found by the evals (F1–F5, B3a–B3b):** a model is looked up on its other power
+  supplies instead of being guessed from a partial search list, and a final answer the model sends
+  without its status is completed deterministically instead of failing.
+
 ---
 
 ## 7. Model choices
@@ -309,6 +324,7 @@ All models are configurable through environment variables.
 | Role | Model | Price (USD per 1M tokens in / out) | Why |
 |---|---|---|---|
 | Chat agent (`LLM_MODEL`) | `anthropic/claude-haiku-5.5` via OpenRouter | 0.10 / 0.50 | Reliable tool calling and structured output at a low price. Passes 34/34 eval cases; about **USD 0.0012 per turn**, median latency 2.5 s. |
+| Speech to text (`WHISPER_MODEL`) | `small` from open-source **faster-whisper**, on the backend's CPU | free (local) | English and Spanish with few digit errors; `base` is faster but misreads more part numbers. Built into the Docker image, so nothing is downloaded at runtime ([§9](#9-optional-features)). |
 | Extraction model A (`EXTRACTION_A_*`) | `gemini-3.5-flash` via Google AI Studio (free tier) | free | Vision model from a different family than B, so their mistakes are independent (the assessment's hint for free experimenting). |
 | Extraction model B (`EXTRACTION_B_*`) | `anthropic/claude-haiku-5.5` via OpenRouter | 0.10 / 0.50 | Second independent transcription; the whole extraction cost USD 0.012. |
 
@@ -413,7 +429,7 @@ Decisions and trade-offs:
 | App shows "The server took too long to answer" | Tap **Allow** on the Android 17 "nearby devices" prompt (or enable it in the app's settings → Permissions); check the backend is running and `api.baseUrl` uses the right port. |
 | App goes back to the login screen with "Your session expired" | The token expired (7 days), was revoked by a logout, or the database was reset. Sign in again. |
 | Voice: "No speech was recognized" on the emulator | Turn on **Extended controls → Microphone → Virtual microphone uses host audio input** and check the computer's microphone. |
-| App shows "Can't reach the server" | Backend not running, wrong `api.baseUrl`, or (physical phone) the computer's firewall blocks the port. |
+| App shows "Can't reach the server" | Backend not running, or `api.baseUrl` has the wrong port. |
 | Chat answers `llm_not_configured` (503) | `OPENROUTER_API_KEY` is empty in `.env`; set it and restart: `docker compose up -d`. |
 | Chat answers `llm_budget_exhausted` (502) | The OpenRouter key has no credit left. |
 | Android Studio shows red errors in `build.gradle.kts` | **File → Sync Project with Gradle Files**. |
@@ -429,12 +445,14 @@ backend/                 FastAPI + LangChain agent (Python 3.12, uv)
   app/tools/             LangChain tools (thin wrappers over the catalog service)
   app/agent/             agent runner, system prompt, structured answer, number check
   app/db/                SQLAlchemy models and session; alembic/ holds the migrations
+  app/auth/              login: password hashing, tokens, test users (seed_users.json)
+  app/voice/             speech to text with faster-whisper
   ingest/                PDF → JSON → PostgreSQL pipeline
   evals/                 eval cases, runner, results
   tests/                 pytest suite
   Dockerfile
 mobile/                  Android app (Kotlin, Jetpack Compose)
-  app/src/main/          data layer, screens, theme
+  app/src/main/          data layer (API, login session, voice recorder), screens, theme
   app/src/debug/         developer-only debug screen and local-network settings
 data/
   raw/                   source PDFs
@@ -446,11 +464,7 @@ docs/
   design.md              every design decision with its trade-off, known limitations
   evals.md               eval results
   design/theme/          Material Theme Builder export (seed #C25E00)
-.claude/                 Claude Code configuration used to build this project (CLAUDE.md)
+.claude/                 AI assistant configuration (CLAUDE.md)
 docker-compose.yml       database + backend
 .env.example             all configuration, with placeholders
 ```
-
-The project was built with Claude Code. `.claude/CLAUDE.md` holds the project rules it worked under
-(numbers only from the database, never read `.env`, record every decision in `docs/design.md`, ask
-before changing an approved decision).
