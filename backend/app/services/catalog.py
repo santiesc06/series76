@@ -149,11 +149,15 @@ def _levenshtein(a: str, b: str) -> int:
     return previous[-1]
 
 
-def _found(part: Part, matched_from: str | None = None) -> dict:
+def _found(part: Part, parts: list[Part], matched_from: str | None = None) -> dict:
     result: dict = {"status": "found" if part.data_available else "no_data"}
     if matched_from:
         result["matched_from_partial_input"] = matched_from
     result["part"] = part_detail(part)
+    # "The same model at 220V / three phase" is then one exact lookup, not a truncated search.
+    siblings = [p for p in parts if p.model_code == part.model_code and p is not part]
+    if siblings:
+        result["same_model_other_power_supplies"] = [part_identity(p) for p in siblings]
     return result
 
 
@@ -170,7 +174,7 @@ def lookup_part(db: Session, query: str) -> dict:
     parts = _all_parts(db)
     for part in parts:
         if part.match_key == key:
-            return _found(part)
+            return _found(part, parts)
 
     # Prefix matching only for genuinely short input (a model code like "761A" or "761A00").
     # A full-length number with a typo must not be silently resolved to a "close" part (US-03).
@@ -178,7 +182,7 @@ def lookup_part(db: Session, query: str) -> dict:
         [p for p in parts if p.match_key.startswith(key)] if len(key) <= PARTIAL_MAX_LENGTH else []
     )
     if len(prefixed) == 1:
-        return _found(prefixed[0], matched_from=query)
+        return _found(prefixed[0], parts, matched_from=query)
     if prefixed:
         return {
             "status": "ambiguous",
@@ -432,13 +436,20 @@ def search_actuators(
     if matches:
         matches.sort(key=lambda m: _sort_value(filters, m[0], m[1]))
         shown = matches[: filters.limit]
-        return {
+        response = {
             "status": "matches",
             "total_matches": len(matches),
             "results": [_result(p, rs, hz) for p, rs in shown],
             "requirements": [c.label for c in constraints],
             "assumptions": _assumptions(filters, shown),
         }
+        if len(matches) > len(shown):
+            response["note"] = (
+                f"Showing the first {len(shown)} of {len(matches)} matches. Other models also "
+                "match: never say a model does not exist because it is not in this list; look it "
+                "up by part number instead."
+            )
+        return response
 
     response = _explain_no_match(filters, candidates, constraints, hz)
     if any(c.key == "hazardous_area" for c in constraints):

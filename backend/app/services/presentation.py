@@ -12,7 +12,8 @@ SERVICE_TITLES = {
     "modulating": "Modulating service",
     "both": "On/Off and Modulating service",
 }
-# search filter -> spec key highlighted on the cards
+# search filter -> spec key highlighted on the cards. Highlights are sent as "group.spec" keys
+# (e.g. "modulating.torque"), so a requirement lights up only the service group it applies to.
 FILTER_HIGHLIGHTS = {
     "min_torque": "torque",
     "max_speed_s": "speed",
@@ -102,5 +103,22 @@ def product_card(
     return card
 
 
+RATING_SPECS = {"torque", "duty_cycle", "cycles_per_hour", "starts_per_hour"}
+
+
 def highlights_for(filters: dict | None) -> list[str]:
-    return [FILTER_HIGHLIGHTS[k] for k in (filters or {}) if k in FILTER_HIGHLIGHTS]
+    """`group.spec` keys to highlight. Rating specs only in the requested service's group (plus
+    "both", the 3-phase tables' single rating); without a service, in every rating group."""
+    filters = filters or {}
+    service = filters.get("service")
+    groups = [service, "both"] if service in ("on_off", "modulating") else [
+        "on_off", "modulating", "both"
+    ]  # fmt: skip
+    keys = []
+    for name in filters:
+        spec = FILTER_HIGHLIGHTS.get(name)
+        if spec in RATING_SPECS:
+            keys += [f"{group}.{spec}" for group in groups]
+        elif spec:
+            keys.append(f"electrical.{spec}")
+    return keys
