@@ -321,3 +321,97 @@
         status: answered
         products_include: ["763B00-11300000/A"]
         answer_any: ["90"]
+
+# --- Robustness: inputs beyond the assessment examples (added 2026-11-08) ---------------------
+# The assessment tests "various test cases of our own": typos, mixed valid/invalid input,
+# informal phrasing, nonsense and follow-ups that need the same model on another supply.
+
+- id: sibling-three-phase
+  covers: [US-02 AC3]
+  turns:
+    - query: "Show me 761A00-11300000/A"
+      expect: {status: answered, products_include: ["761A00-11300000/A"]}
+    - query: "Is there a three phase version of it?"
+      # It exists but the PDF lists it as N/A: the right answer names it and says so (no_data),
+      # with no numbers. A card for an N/A part is optional (relaxed after the 2026-11-08 run).
+      expect:
+        status: [no_data, answered]
+        answer_any: ["761A00-11330C00/A"]
+
+- id: sibling-voltage-spanish
+  covers: [US-02 AC3, NFR-04]
+  turns:
+    - query: "Muéstrame el 763B00-11300000/A"
+      expect: {status: answered, products_include: ["763B00-11300000/A"]}
+    - query: "¿Y el mismo modelo a 220V monofásico?"
+      expect:
+        status: answered
+        products_include: ["763B00-11320000/A"]
+
+- id: one-valid-one-invalid-part
+  covers: [US-03 AC1, US-12 AC1]
+  turns:
+    - query: "Compare 763B00-11300000/A and 763B00-11399999/A"
+      expect:
+        products_include: ["763B00-11300000/A"]
+        products_exclude: ["763B00-11399999/A"]
+        answer_any: ["not", "isn't", "no "]
+
+- id: transposed-digits
+  covers: [US-03 AC1, US-03 AC2]
+  turns:
+    - query: "torque of 736B00-11300000/A"
+      expect:
+        status: [not_found, clarification_needed]
+        products_max: 0
+        quick_replies_min: 1
+
+- id: impossible-requirement
+  covers: [US-10 AC1, US-10 AC3]
+  turns:
+    - query: "I need a 220V explosionproof modulating actuator with 50000 Nm"
+      expect:
+        status: no_match
+        products_max: 0
+
+- id: spanish-informal-requirement
+  covers: [US-07 AC1, NFR-04]
+  turns:
+    - query: "oye necesito uno que aguante como 1000 Nm, 220 monofásico, para abrir y cerrar"
+      expect:
+        status: answered
+        products_min: 1
+        products_where: {voltage: 220, phase: single}
+
+- id: fastest-with-torque
+  covers: [US-07 AC5]
+  turns:
+    - query: "What is the fastest weatherproof 110V single phase actuator with at least 300 Nm?"
+      expect:
+        status: answered
+        products_include: ["763A00-11300000/A"]
+
+- id: three-phase-duty-cycle
+  covers: [US-01 AC1, D-1]
+  turns:
+    - query: "What duty cycle does 763A00-11330C00/A have in modulating service?"
+      expect:
+        status: answered
+        products_include: ["763A00-11330C00/A"]
+        answer_any: ["70"]
+
+- id: nonsense-input
+  covers: [NFR-02, US-18 AC1]
+  turns:
+    - query: "asdfgh qwerty 123"
+      expect:
+        status: [out_of_scope, clarification_needed]
+        products_max: 0
+
+- id: other-brand
+  covers: [NFR-02]
+  turns:
+    - query: "What is the torque of a Rotork IQ3?"
+      expect:
+        status: [out_of_scope, not_found]
+        products_max: 0

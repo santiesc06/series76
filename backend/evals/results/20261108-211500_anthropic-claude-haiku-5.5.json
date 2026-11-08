@@ -1,0 +1,161 @@
+{
+  "summary": {
+    "model": "anthropic/claude-haiku-5.5",
+    "date": "2026-11-08T21:15:00+00:00",
+    "cases_passed": 1,
+    "cases_total": 1,
+    "checks_passed": 12,
+    "checks_total": 12,
+    "cost_usd": 0.0032,
+    "median_latency_ms": 3820,
+    "wall_time_s": 7.5
+  },
+  "cases": [
+    {
+      "id": "sibling-three-phase",
+      "covers": [
+        "US-02 AC3"
+      ],
+      "passed": true,
+      "checks_passed": 12,
+      "checks_total": 12,
+      "cost_usd": 0.003193,
+      "turns": [
+        {
+          "query": "Show me 761A00-11300000/A",
+          "answer": "761A00-11300000/A is a weatherproof, 110V single-phase model (size 1, CSA/CE/UKCA certified). On/Off service gives 700 in-lbs (80 Nm) at 40% duty cycle; modulating service gives 580 in-lbs (65 Nm). Speed is 17 s at 60 Hz or 20 s at 50 Hz for a 90° turn.",
+          "status": "answered",
+          "view": "cards",
+          "products": [
+            "761A00-11300000/A"
+          ],
+          "alternatives": [],
+          "quick_replies": [
+            "220V single phase version"
+          ],
+          "tools": [
+            {
+              "tool": "lookup_part",
+              "args": {
+                "part_number": "761A00-11300000/A"
+              }
+            }
+          ],
+          "number_check": {
+            "status": "pass",
+            "unsupported": []
+          },
+          "tokens": {
+            "input": 10722,
+            "output": 360
+          },
+          "cost_usd": 0.001252,
+          "latency_ms": 3820,
+          "checks": [
+            [
+              "no_internals",
+              true,
+              ""
+            ],
+            [
+              "numbers_supported",
+              true,
+              ""
+            ],
+            [
+              "no_invented_parts",
+              true,
+              ""
+            ],
+            [
+              "language",
+              true,
+              ""
+            ],
+            [
+              "status",
+              true,
+              ""
+            ],
+            [
+              "products_include",
+              true,
+              ""
+            ]
+          ]
+        },
+        {
+          "query": "Is there a three phase version of it?",
+          "answer": "Yes, a 220V three-phase version exists (761A00-11330C00/A), but the catalog lists no electrical data for it, so I can't confirm its torque, speed or current. The same model is also available as 761A00-11320000/A on 220V single phase, which has published data.",
+          "status": "no_data",
+          "view": "cards",
+          "products": [
+            "761A00-11330C00/A",
+            "761A00-11320000/A"
+          ],
+          "alternatives": [],
+          "quick_replies": [
+            "Show 220V single phase version",
+            "Show original 110V model"
+          ],
+          "tools": [
+            {
+              "tool": "lookup_part",
+              "args": {
+                "part_number": "761A00-11300000/A"
+              }
+            },
+            {
+              "tool": "lookup_part",
+              "args": {
+                "part_number": "761A00-11330C00/A"
+              }
+            }
+          ],
+          "number_check": {
+            "status": "pass",
+            "unsupported": []
+          },
+          "tokens": {
+            "input": 17331,
+            "output": 415
+          },
+          "cost_usd": 0.001941,
+          "latency_ms": 3385,
+          "checks": [
+            [
+              "no_internals",
+              true,
+              ""
+            ],
+            [
+              "numbers_supported",
+              true,
+              ""
+            ],
+            [
+              "no_invented_parts",
+              true,
+              ""
+            ],
+            [
+              "language",
+              true,
+              ""
+            ],
+            [
+              "status",
+              true,
+              ""
+            ],
+            [
+              "answer_any",
+              true,
+              ""
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
