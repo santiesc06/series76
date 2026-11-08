@@ -121,7 +121,7 @@ messages         id (uuid), session_id, role ('user'|'assistant'), content, payl
 | C3 | **No streaming.** One request per turn (~3–8 s), with a typing indicator in the app. | ✅ | Streaming (SSE) is nicer but adds complexity on both sides and conflicts with the post-answer number check (B4). |
 | C4 | **Error format:** `{"error": {"code": "...", "message": "..."}}` with 400/404/422, 502 (LLM provider failed or budget exhausted), 503 (database down). | ✅ | One shape for the app to handle. |
 | C5 | Session created on the first message; title = first query truncated to 60 characters (no LLM call). Unknown `session_id` → 404 (US-16 AC4). | ✅ | |
-| C6 | `sessions.user_id` exists from the start (nullable), so login (US-21) needs no schema rework. | ✅ | |
+| C6 | `sessions.user_id` exists from the start (nullable), so login (US-21) needs no schema rework. | ✅ | **Changed 2026-11-08 by U3** (user approved): the column became a UUID foreign key to `users.id`, one small migration, so the database guarantees every conversation has a real owner. |
 | C7 | History responses return the **snapshot** of products as the user saw them (stored in `messages.payload`), not re-hydrated data. | ✅ | The past conversation shows what was actually answered. |
 
 ### 4.1 `POST /api/conversation` response
@@ -276,6 +276,18 @@ Details the approved decisions (B1–B7, C1–C7) left open, decided while imple
 |---|---|---|
 | O1 | **Order:** model comparison (fills the README's model-choice table), then login (US-21), then voice (US-22). | Cheapest and closest to a required item first; login is fully specified by the assessment. |
 | O2 | **Voice = Whisper on the backend:** the app records audio and sends it to a new transcription endpoint; the backend runs open-source **faster-whisper** (small model) on CPU. The transcript becomes a normal chat message. | Free and keyless, same quality on every phone, and it is the open-source route the assessment allows. Trade-off: the Docker image grows (model weights) and transcription takes a few seconds on CPU. Rejected: Android's built-in recognizer (device-dependent, may send audio to Google, not Whisper) and whisper.cpp in the app (native code and a large APK, too risky for the deadline). |
+
+## 7f. Login plan (US-21, ✅ user, 2026-11-08)
+
+| ID | Decision | Why / trade-off |
+|---|---|---|
+| U1 | **Opaque tokens stored in the database:** login returns a random token (`secrets.token_urlsafe(32)`); the `auth_tokens` table stores only its SHA-256 hash, the user and an expiry (7 days, `AUTH_TOKEN_TTL_HOURS`). Each request looks the hash up. Rejected: JWT. | Logout really revokes a token, and there is no signing secret to configure, so `docker compose up` keeps working without new keys. A leaked database does not leak usable tokens. Trade-off: one indexed lookup per request; a JWT avoids it but needs a secret and cannot be revoked before it expires without a denylist table. |
+| U2 | **argon2id password hashes** (`argon2-cffi`, library defaults). An unknown email is verified against a dummy hash, so the response time does not reveal which emails exist. Rejected: bcrypt (72-byte limit), hand-rolled stdlib scrypt. | OWASP's first recommendation; one small dependency. |
+| U3 | **`sessions.user_id` becomes a UUID foreign key to `users.id`** (`ON DELETE CASCADE`), in one Alembic migration. **Changes the detail of C6** ("no schema rework"): the column already existed, but as nullable text with no key. | The column is empty, so the change is safe, and the database then guarantees every conversation points to a real user. Conversations created before login (`user_id` NULL) are visible to nobody; only a dev database has them. |
+| U4 | **Every `/api/*` route needs a token** except `POST /api/auth/login`; `/health`, `/health/ready` and `/docs` stay open. Another user's conversation or message returns 404 (`not_found`), not 403. Endpoints: `POST /api/auth/login` → `{token, token_type, expires_at, user}`, `POST /api/auth/logout`, `GET /api/auth/me`. Swagger gets an "Authorize" button (HTTP Bearer). | One rule, no "anonymous" mode to test. 404 does not confirm that someone else's conversation exists. Evals call the service directly, so they are unaffected. |
+| U5 | **Test users seeded on every start** from `backend/app/auth/seed_users.json` (email, name, argon2 hash only); the passwords are documented in the README as test values. Idempotent upsert, run in the container start command after `ingest load`. | The repository never holds a plain password in code or data, and a fresh database always has the users the README lists. |
+| U6 | **App token storage: Jetpack DataStore** in app-private storage, excluded from cloud backup. Not encrypted at rest. Rejected: Keystore + Tink encryption (more code and a dependency for little gain here); EncryptedSharedPreferences (deprecated). | Standard and simple; the token expires and logout revokes it, which bounds the risk. Listed as a known limitation. |
+| U7 | **Not implemented** (known limitations): login rate limiting, sign-up, password reset, refresh tokens. | Not required by the assessment (§7). |
 
 ---
 
