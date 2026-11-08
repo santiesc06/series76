@@ -286,10 +286,13 @@ All models are configurable through environment variables.
 | Extraction model A (`EXTRACTION_A_*`) | `gemini-3.5-flash` via Google AI Studio (free tier) | free | Vision model from a different family than B, so their mistakes are independent (the assessment's hint for free experimenting). |
 | Extraction model B (`EXTRACTION_B_*`) | `anthropic/claude-haiku-5.5` via OpenRouter | 0.10 / 0.50 | Second independent transcription; the whole extraction cost USD 0.012. |
 
-- Candidates for the agent with the same tool-calling support: `openai/gpt-6-luna` (same price) and
-  `openai/gpt-oss-120b` (open-weight, 0.15 / 0.60). The eval runner takes `--model` and has their prices in
-  `backend/evals/models.yaml`. The comparison run is still pending (deferred until after the app);
-  its table is in [`docs/evals.md`](docs/evals.md).
+- Compared on the full eval set (34 cases, same code and prompt, one run each; details in
+  [`docs/evals.md`](docs/evals.md#model-comparison)):
+  - `anthropic/claude-haiku-5.5`: 34/34, USD 0.049, 2.5 s median. **Shipped.**
+  - `openai/gpt-6-luna`: 33/34, USD 0.027, 2.7 s median. Viable cheaper fallback; its one miss was
+    a missing product card on a follow-up.
+  - `openai/gpt-oss-120b`: 12/34. In 22 cases it never returned the structured final answer the
+    agent requires.
 - **Budget:** unit tests never call an LLM (a scripted fake model drives the real agent loop); evals
   run by hand with a cost guard (`--max-cost`, default USD 1); every turn logs its tokens and
   estimated cost.

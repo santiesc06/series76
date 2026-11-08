@@ -1,5 +1,5 @@
-# OpenRouter prices in USD per 1M tokens (public model list, 2026-11-07), used only for the
+# OpenRouter prices in USD per 1M tokens (public model list /api/v1/models, re-checked 2026-11-07), used only for the
 # estimated cost in eval results. Candidates for the agent model (design §3.2, Q5).
 anthropic/claude-haiku-5.5: {input: 0.10, output: 0.50}
 openai/gpt-6-luna: {input: 0.10, output: 0.50}
-openai/gpt-oss-120b: {input: 0.01, output: 0.037}
+openai/gpt-oss-120b: {input: 0.15, output: 0.60}
