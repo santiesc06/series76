@@ -320,7 +320,7 @@ All models are configurable through environment variables.
 ```bash
 cd backend
 uv sync
-uv run pytest                                        # 165 tests, no LLM calls, own database series76_test
+uv run pytest                                        # 169 tests, no LLM calls, own database series76_test
 uv run ruff check . && uv run ruff format --check .
 ```
 
