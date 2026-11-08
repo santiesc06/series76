@@ -217,10 +217,9 @@ The backend URL is a build setting, read from `mobile/local.properties` (not com
 api.baseUrl=http://10.0.2.2:8000/
 ```
 
-| Where the app runs | `api.baseUrl` |
-|---|---|
-| Android emulator, backend on the same computer | `http://10.0.2.2:<API_PORT>/` (default `http://10.0.2.2:8000/` if the line is absent) |
-| Physical phone on the same Wi-Fi | `http://<your computer's LAN IP>:<API_PORT>/` (allow the port in the computer's firewall) |
+`10.0.2.2` is the Android emulator's address for the computer it runs on. Use the port of your
+backend (`API_PORT`, default 8000); without the line the app uses `http://10.0.2.2:8000/`. The app
+was built and tested on the Android emulator.
 
 Press **Run** again after changing it (it is compiled into `BuildConfig`).
 
@@ -430,7 +429,7 @@ Decisions and trade-offs:
 | App shows "The server took too long to answer" | Tap **Allow** on the Android 17 "nearby devices" prompt (or enable it in the app's settings → Permissions); check the backend is running and `api.baseUrl` uses the right port. |
 | App goes back to the login screen with "Your session expired" | The token expired (7 days), was revoked by a logout, or the database was reset. Sign in again. |
 | Voice: "No speech was recognized" on the emulator | Turn on **Extended controls → Microphone → Virtual microphone uses host audio input** and check the computer's microphone. |
-| App shows "Can't reach the server" | Backend not running, wrong `api.baseUrl`, or (physical phone) the computer's firewall blocks the port. |
+| App shows "Can't reach the server" | Backend not running, or `api.baseUrl` has the wrong port. |
 | Chat answers `llm_not_configured` (503) | `OPENROUTER_API_KEY` is empty in `.env`; set it and restart: `docker compose up -d`. |
 | Chat answers `llm_budget_exhausted` (502) | The OpenRouter key has no credit left. |
 | Android Studio shows red errors in `build.gradle.kts` | **File → Sync Project with Gradle Files**. |
