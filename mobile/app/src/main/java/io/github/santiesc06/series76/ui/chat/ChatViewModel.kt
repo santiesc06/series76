@@ -1,5 +1,6 @@
 package io.github.santiesc06.series76.ui.chat
 
+import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,7 @@ import io.github.santiesc06.series76.data.api.ConversationResponse
 import io.github.santiesc06.series76.data.api.HistoryMessage
 import io.github.santiesc06.series76.data.api.Product
 import io.github.santiesc06.series76.data.api.QuickReply
+import io.github.santiesc06.series76.data.voice.VoiceRecorder
 import io.github.santiesc06.series76.navigation.ChatRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,12 +50,24 @@ data class ChatUiState(
     val historyError: AppError? = null,
     val sending: Boolean = false,
     val sendError: AppError? = null,
+    val voice: VoiceState = VoiceState.Idle,
+    val voiceError: AppError? = null,
+    /** A finished transcript for the screen to put in the message box (V1), then consumed. */
+    val transcript: String? = null,
 )
+
+/** Voice message input (US-22). */
+sealed interface VoiceState {
+    data object Idle : VoiceState
+    data class Recording(val startedAtMs: Long) : VoiceState
+    data object Transcribing : VoiceState
+}
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ChatRepository,
+    private val recorder: VoiceRecorder,
 ) : ViewModel() {
 
     private val route = savedStateHandle.toRoute<ChatRoute>()
@@ -129,6 +143,75 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    // ----------------------------------------------------------------- voice (US-22)
+
+    fun startRecording() {
+        if (_state.value.voice != VoiceState.Idle) return
+        try {
+            recorder.start(onLimit = ::finishRecording) // stops by itself at 60 s (AC1)
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(voiceError = AppError("mic_unavailable", "The microphone could not start."))
+            }
+            return
+        }
+        _state.update {
+            it.copy(voice = VoiceState.Recording(SystemClock.elapsedRealtime()), voiceError = null)
+        }
+    }
+
+    /** Stops recording and sends the audio to be transcribed; the text goes to the box (V1). */
+    fun finishRecording() {
+        if (_state.value.voice !is VoiceState.Recording) return
+        val file = recorder.stop()
+        if (file == null) {
+            _state.update {
+                it.copy(
+                    voice = VoiceState.Idle,
+                    voiceError = AppError("audio_empty", "The recording was too short."),
+                )
+            }
+            return
+        }
+        _state.update { it.copy(voice = VoiceState.Transcribing) }
+        viewModelScope.launch {
+            val result = try {
+                repository.transcribe(file)
+            } finally {
+                file.delete() // the audio is not kept on the phone either (V5)
+            }
+            _state.update {
+                when (result) {
+                    is ApiResult.Ok -> it.copy(voice = VoiceState.Idle, transcript = result.value.text)
+                    is ApiResult.Err -> it.copy(voice = VoiceState.Idle, voiceError = result.error)
+                }
+            }
+        }
+    }
+
+    fun cancelRecording() {
+        recorder.cancel()
+        _state.update { it.copy(voice = VoiceState.Idle) }
+    }
+
+    fun transcriptConsumed() = _state.update { it.copy(transcript = null) }
+
+    fun dismissVoiceError() = _state.update { it.copy(voiceError = null) }
+
+    /** US-22 AC6: explain, and keep text input working. */
+    fun microphoneDenied() = _state.update {
+        it.copy(
+            voiceError = AppError(
+                "mic_permission",
+                "Allow microphone access to send voice messages. You can still type.",
+            ),
+        )
+    }
+
+    override fun onCleared() {
+        if (_state.value.voice is VoiceState.Recording) recorder.cancel()
     }
 
     private fun toItem(r: ConversationResponse) = ChatItem.Assistant(
