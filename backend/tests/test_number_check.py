@@ -59,3 +59,16 @@ def test_total_count_from_the_tool_passes():
 def test_series_name_and_size_codes_are_identifiers():  # B4a, eval run 2026-11-07
     assert check("No Series 76 model reaches that; sizes 765, 766 and 767 are the largest.") == []
     assert check("It delivers 766 Nm.") == ["766"]  # with a unit it is a value again
+
+
+def test_unicode_hyphens_and_spaces_in_part_numbers():  # B4a″, eval comparison 2026-11-08
+    # gpt-oss-120b wrote part numbers with a non-breaking hyphen (U+2011) and narrow no-break
+    # spaces (U+202F); "11300000" was read as an invented value and the answer was replaced.
+    text = "The 763B00\u201111300000/A delivers 500\u202fNm (4,400\u202fin\u2011lb)."
+    assert check(text) == []
+    assert check("763B00\u201311300000/A draws 4.6\u20134.8\u00a0A.") == []  # en dash
+
+
+def test_unicode_characters_do_not_hide_invented_numbers():  # B4a″
+    assert check("The 763B00\u201111300000/A delivers 520\u202fNm.") == ["520"]
+    assert check("It draws 5\u202fA.") == ["5"]  # small number with a unit is still checked
