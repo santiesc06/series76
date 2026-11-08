@@ -17,8 +17,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app/backend
 
 # Dependencies first (cached layer): runtime only, no dev/ingest groups (pymupdf, pytest, ruff).
+# The uv download cache lives in a build cache mount, not in the image (~600 MB less).
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --locked --no-default-groups --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-default-groups --no-install-project
+
+# Voice (US-22, design V3): the Whisper model is downloaded here, into the image, so the container
+# never needs Hugging Face at runtime. Change the model with the build arg (compose: WHISPER_MODEL).
+ARG WHISPER_MODEL=small
+ENV HF_HOME=/opt/hf     WHISPER_MODEL=${WHISPER_MODEL}
+RUN python -c "import os; from faster_whisper import download_model; download_model(os.environ['WHISPER_MODEL'])"     && chmod -R a+rX /opt/hf
+ENV HF_HUB_OFFLINE=1
 
 COPY backend/ ./
 # The verified dataset that `ingest load` puts into PostgreSQL (ingest/paths.py expects ../data).

@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from app.api import auth, conversation, errors, health
+from app.api import auth, conversation, errors, health, voice
 from app.config import get_settings
 from app.logging_config import configure_logging
 
@@ -18,3 +18,4 @@ errors.register(app)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(conversation.router)
+app.include_router(voice.router)

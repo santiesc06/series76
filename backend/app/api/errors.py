@@ -12,6 +12,7 @@ from app.agent.llm import LLMNotConfiguredError
 from app.agent.runner import AgentError
 from app.auth.service import InvalidCredentialsError, UnauthorizedError
 from app.services.conversation import NotFoundError
+from app.voice.transcriber import VoiceError
 
 log = logging.getLogger("api")
 
@@ -38,6 +39,11 @@ def register(app: FastAPI) -> None:
     async def invalid_credentials(_: Request, exc: InvalidCredentialsError) -> JSONResponse:
         log.info("login failed")  # no email or password in the logs
         return error_response(401, "invalid_credentials", "Wrong email or password.")
+
+    @app.exception_handler(VoiceError)
+    async def voice_failed(_: Request, exc: VoiceError) -> JSONResponse:
+        log.info("voice error", extra={"code": exc.code})
+        return error_response(exc.status, exc.code, exc.message)
 
     @app.exception_handler(AgentError)
     async def agent_failed(_: Request, exc: AgentError) -> JSONResponse:

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     extraction_b_api_key: str = ""  # falls back to openrouter_api_key when empty
     extraction_b_model: str = "anthropic/claude-haiku-5.5"
 
+    # Voice (US-22): faster-whisper model name (design V2); the Docker image ships this model (V3)
+    whisper_model: str = "small"
+
     # Database
     database_url: str = "postgresql+psycopg://series76:series76@localhost:5433/series76"
 

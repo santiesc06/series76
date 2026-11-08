@@ -145,3 +145,11 @@ class LoginResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_at: datetime
     user: UserOut
+
+
+class TranscribeResponse(BaseModel):
+    """Voice message transcript (US-22); the app puts `text` in the message box to review."""
+
+    text: str
+    language: str = Field(description="Detected language code, e.g. 'en' or 'es'.")
+    duration_s: float = Field(description="Length of the recording in seconds.")
