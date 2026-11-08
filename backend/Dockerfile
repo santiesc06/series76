@@ -32,5 +32,5 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=2)"]
 
 # On every start: migrate the schema, (re)load the catalog (idempotent, conversations untouched),
-# then serve. Design A4, US-20 AC1.
-CMD ["sh", "-c", "alembic upgrade head && python -m ingest load && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# create the test users (idempotent), then serve. Design A4, U5, US-20 AC1.
+CMD ["sh", "-c", "alembic upgrade head && python -m ingest load && python -m app.auth.seed && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

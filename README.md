@@ -85,6 +85,7 @@ Then edit `.env`. Only one value is required:
 | `POSTGRES_PORT` | no | `5433` | Host port of PostgreSQL (5433 avoids a locally installed PostgreSQL) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | no | `series76` | Database credentials (local only) |
 | `DEBUG_ENDPOINTS` | no | `true` | Serves `/api/messages/{id}/debug` for the app's debug screen; set `false` in production |
+| `AUTH_TOKEN_TTL_HOURS` | no | `168` | Lifetime of a login token (7 days) |
 | `HISTORY_WINDOW`, `LOG_LEVEL` | no | `12`, `INFO` | Messages sent to the LLM as context; log level |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | no | empty | Optional tracing to Langfuse Cloud ([§9](#9-optional-features)) |
 | `EXTRACTION_A_*`, `EXTRACTION_B_*` | no | | Only to re-run the PDF extraction ([§4](#4-ingestion)) |
@@ -105,18 +106,22 @@ docker compose up --build
 
 This starts PostgreSQL and the backend. On every start the backend **creates or migrates the schema**
 (`alembic upgrade head`), **loads the verified catalog** (`python -m ingest load`, idempotent; saved
-conversations are kept) and serves the API. Ready when the log shows `Uvicorn running`.
+conversations are kept), **creates the test users** (`python -m app.auth.seed`, [§9](#9-optional-features))
+and serves the API. Ready when the log shows `Uvicorn running`.
 
 | URL | What |
 |---|---|
 | http://localhost:8000/docs | Interactive API docs (Swagger): try every endpoint from the browser |
 | http://localhost:8000/health/ready | Readiness (database reachable) |
 
-Quick check:
+Quick check: sign in as a test user, then ask with the token (every `/api/*` route needs it). In
+Swagger, call `POST /api/auth/login`, then paste the token into **Authorize**.
 
 ```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email": "alice@series76.test", "password": "Damper-1751-torque"}' | python -c "import json,sys; print(json.load(sys.stdin)['token'])")
 curl -X POST http://localhost:8000/api/conversation -H "Content-Type: application/json" \
-  -d '{"query": "What is the torque of 763B00-11300000/A?"}'
+  -H "Authorization: Bearer $TOKEN" -d '{"query": "What is the torque of 763B00-11300000/A?"}'
 ```
 
 Send the returned `session_id` with the next question to continue the conversation
@@ -126,20 +131,25 @@ Send the returned `session_id` with the next question to continue the conversati
 
 | Method and path | Purpose |
 |---|---|
+| `POST /api/auth/login` | `{email, password}` → `{token, token_type, expires_at, user}`. Open; every other `/api/*` route needs `Authorization: Bearer <token>` |
+| `POST /api/auth/logout` | Revokes the token sent with the request (204) |
+| `GET /api/auth/me` | The signed-in user (the app checks a saved token with it) |
 | `POST /api/conversation` | `{session_id?, query}` → `{session_id, message_id, answer, status, view, products, alternatives, quick_replies, created_at}` |
-| `GET /api/sessions` | Conversations: `id`, `title`, `created_at`, `updated_at`, `message_count` |
+| `GET /api/sessions` | The user's conversations: `id`, `title`, `created_at`, `updated_at`, `message_count` |
 | `GET /api/sessions/{id}/messages` | Full history to resume a conversation, with the product cards as they were shown |
 | `GET /api/messages/{id}/debug` | **Developer only:** tool calls with arguments, raw results and durations, model, tokens, cost, number check |
 | `GET /health`, `GET /health/ready` | Liveness and readiness probes |
 
 Changes from the suggested endpoints: they are kept as suggested, with `message_count` added to
-`/api/sessions`. The debug data is **not** in the chat response (so end users never receive tool
-names or internals); it has its own endpoint, enabled by `DEBUG_ENDPOINTS`. Login is not implemented
-([§9](#9-optional-features)).
+`/api/sessions`, and `logout` and `me` added to login. The debug data is **not** in the chat
+response (so end users never receive tool names or internals); it has its own endpoint, enabled by
+`DEBUG_ENDPOINTS`. Each user only reaches their own conversations; another user's conversation or
+message answers 404, as if it did not exist.
 
 `status` is one of `answered`, `clarification_needed`, `not_found`, `no_data`, `no_match`,
 `out_of_scope`; `view` is `cards`, `comparison` or `none`. Errors always have the shape
-`{"error": {"code": "...", "message": "..."}}` (e.g. `not_found` 404, `invalid_request` 422,
+`{"error": {"code": "...", "message": "..."}}` (e.g. `unauthorized` / `invalid_credentials` 401,
+`not_found` 404, `invalid_request` 422,
 `llm_unavailable` / `llm_budget_exhausted` 502, `llm_not_configured` / `database_unavailable` 503).
 
 ### Without Docker (development)
@@ -150,6 +160,7 @@ cd backend
 uv sync
 uv run alembic upgrade head
 uv run python -m ingest load
+uv run python -m app.auth.seed                       # test users (§9)
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -340,8 +351,19 @@ cd mobile
 
 | Feature | Status |
 |---|---|
-| Login (US-21) | **Not implemented.** The app works for a single user. `sessions.user_id` already exists (nullable), so adding login needs no schema change. |
+| Login (US-21) | **Backend implemented** (app screen in progress). Email and password return an opaque token (7 days, `AUTH_TOKEN_TTL_HOURS`); the database stores only its SHA-256 hash, so logout revokes it at once. Passwords are stored as argon2id hashes. Every `/api/*` route except login needs `Authorization: Bearer <token>`, and each user sees only their own conversations. Design U1–U7. |
 | Voice messages (US-22) | **Not implemented.** |
+
+**Test users** (created on every start from `backend/app/auth/seed_users.json`, which holds only
+the hashes). These are test credentials for this demo, not secrets:
+
+| Email | Password |
+|---|---|
+| `alice@series76.test` | `Damper-1751-torque` |
+| `bob@series76.test` | `Torque-7981-gear` |
+
+Not implemented (not required by the assessment): sign-up, password reset, refresh tokens, login rate
+limiting.
 | Langfuse tracing (extra) | **Implemented, off by default.** Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and `LANGFUSE_HOST` for the US region) to trace every turn (LLM calls, tool calls, tokens, latency) to Langfuse Cloud, grouped by conversation and tagged `api` or `eval`. Tracing errors never affect an answer. |
 
 ---
