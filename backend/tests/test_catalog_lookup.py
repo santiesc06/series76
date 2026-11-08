@@ -84,3 +84,15 @@ def test_dc_part_has_single_frequency_independent_values(db):  # US-11 AC4
     part = lookup_part(db, "763X30-11370000/A")["part"]
     assert part["electrical"]["speed_s"] == 32
     assert part["frequency_dependent"] is False
+
+
+def test_found_part_lists_the_same_model_on_other_power_supplies(db):  # US-02 AC3
+    result = lookup_part(db, "763B00-11300000/A")
+    siblings = {
+        s["part_number"]: s["power_supply"] for s in result["same_model_other_power_supplies"]
+    }
+    assert siblings == {
+        "763B00-11320000/A": "220V single phase",
+        "763B00-11330C00/A": "220V three phase",
+    }
+    assert "763B00-11300000/A" not in siblings  # not itself

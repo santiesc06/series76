@@ -36,6 +36,7 @@ def post(db, make_user):
         send.model = model
         return client.post("/api/conversation", json={"query": f"Compare {A} and {B}"})
 
+    send.client = client
     yield send
     app.dependency_overrides.clear()
 
@@ -43,6 +44,11 @@ def post(db, make_user):
 def broken_answer():
     """What the model sent: everything inside answer_text, no status."""
     return tool_call("FinalAnswer", answer_text=LEAKED)
+
+
+def invalid_answer():
+    """A call that cannot be completed: a status that does not exist."""
+    return tool_call("FinalAnswer", answer_text="Here they are.", status="done")
 
 
 def lookups():
@@ -62,6 +68,40 @@ def test_leaked_markup_is_cut_from_the_answer_text():  # B3a
     )
 
 
+def test_leaked_fields_are_recovered_and_status_inferred(post):  # B3b, the real failure
+    r = post([*lookups(), broken_answer()])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "answered"
+    assert body["answer"] == "Both are weatherproof 110V single-phase actuators."
+    assert [p["part_number"] for p in body["products"]] == [A]  # from the leaked product_refs
+    assert body["view"] == "cards"  # one product: comparison needs 2+ (existing rule)
+    debug = post.client.get(f"/api/messages/{body['message_id']}/debug").json()
+    assert debug["status_inferred"] is True
+
+
+@pytest.mark.parametrize(
+    ("fields", "status"),
+    [
+        ({"alternative_refs": [A]}, "no_match"),
+        ({"product_refs": [A]}, "answered"),
+        ({"quick_replies": [{"label": "110V", "message": "110V"}]}, "clarification_needed"),
+        ({}, "answered"),
+    ],
+)
+def test_missing_status_is_inferred_from_the_other_fields(fields, status):  # B3b
+    answer = FinalAnswer.model_validate({"answer_text": "x", **fields})
+    assert answer.status == status and answer._status_inferred is True
+    assert (
+        FinalAnswer.model_validate({"answer_text": "x", "status": "no_data"})._status_inferred
+        is False
+    )
+
+
+def test_the_model_is_still_asked_for_a_status():  # B3b: inference is a safety net only
+    assert "status" in FinalAnswer.model_json_schema()["required"]
+
+
 def test_invalid_final_answer_gets_a_clear_retry_message(post):  # B3a
     good = tool_call(
         "FinalAnswer",
@@ -70,24 +110,24 @@ def test_invalid_final_answer_gets_a_clear_retry_message(post):  # B3a
         product_refs=[A, B],
         answer_text="Here they are side by side.",
     )
-    r = post([*lookups(), broken_answer(), good])
+    r = post([*lookups(), invalid_answer(), good])
     assert r.status_code == 200
     body = r.json()
     assert body["view"] == "comparison"
     assert [p["part_number"] for p in body["products"]] == [A, B]
 
     retry = post.model.seen[-1][-1].content  # what the model read before its second try
-    assert retry == RETRY_MESSAGE.format(problem="status: missing")
+    assert retry == RETRY_MESSAGE.format(problem="status: literal_error")
     assert "pydantic" not in retry
 
 
 def test_repeated_invalid_answers_are_logged_without_user_text(post, caplog):  # B3a
     caplog.set_level(logging.WARNING, logger="api")
-    r = post([*lookups(), *[broken_answer() for _ in range(20)]])
+    r = post([*lookups(), *[invalid_answer() for _ in range(20)]])
     assert r.status_code == 504
     assert r.json()["error"]["code"] == "agent_step_limit"
 
     record = next(rec for rec in caplog.records if rec.getMessage() == "agent error")
     assert record.code == "agent_step_limit"
-    assert "invalid FinalAnswer call(s); last: status: missing" in record.detail
-    assert "weatherproof" not in record.detail  # the answer text never reaches the log
+    assert "invalid FinalAnswer call(s); last: status: literal_error" in record.detail
+    assert "Here they are" not in record.detail  # the answer text never reaches the log

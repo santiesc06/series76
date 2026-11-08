@@ -335,6 +335,7 @@ def handle_turn(
             "number_check": check,
             "rejected_refs": rejected,
             "slot_fix": slot_fix,
+            "status_inferred": answer._status_inferred,  # B3b
             "context_note": note,
         },
     )

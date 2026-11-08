@@ -186,3 +186,13 @@ def test_missing_voltage_with_no_match_still_says_no_model(db):  # US-10 AC3, B2
 def test_guard_does_not_change_searches_with_a_voltage(db):  # B2a
     filters = {"voltage": 110, "min_torque": 500}
     assert _guarded(db, **filters) == search_actuators(db, SearchFilters(**filters))
+
+
+def test_partial_result_list_says_so(db):  # US-07 AC4: a short list is not the whole catalog
+    result = search_actuators(
+        db, SearchFilters(voltage=220, phase="single", enclosure="weatherproof")
+    )
+    assert result["total_matches"] > len(result["results"])
+    assert f"of {result['total_matches']} matches" in result["note"]
+    complete = search_actuators(db, SearchFilters(enclosure="explosionproof", min_torque=4000))
+    assert "note" not in complete or complete["total_matches"] == len(complete["results"])

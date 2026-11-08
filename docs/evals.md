@@ -2,10 +2,10 @@
 
 The eval set runs the **real agent on the real catalog** with the real LLM and grades every answer
 with **deterministic checks** (design Q2): no LLM-as-judge, so a run is cheap and its grades are
-reproducible. Unit tests (`backend/tests/`, 144 tests) cover the code with a scripted model and
+reproducible. Unit tests (`backend/tests/`, 186 tests) cover the code with a scripted model and
 never call an LLM; the evals cover the model's behavior.
 
-- Cases: [`backend/evals/questions.yaml`](../backend/evals/questions.yaml), 34 cases (39 turns),
+- Cases: [`backend/evals/questions.yaml`](../backend/evals/questions.yaml), 44 cases (51 turns; the last 10 are robustness cases added 2026-11-08),
   each tagged with the acceptance criteria it proves.
 - Checks: [`backend/evals/checks.py`](../backend/evals/checks.py). Runner:
   [`backend/evals/run.py`](../backend/evals/run.py). Raw results:
@@ -15,7 +15,7 @@ never call an LLM; the evals cover the model's behavior.
 
 ## How to run
 
-From `backend/` (reads `OPENROUTER_API_KEY` from `.env`; about USD 0.05 per full run):
+From `backend/` (reads `OPENROUTER_API_KEY` from `.env`; about USD 0.07 per full run):
 
 ```bash
 uv run python -m evals.run                                # all cases, LLM_MODEL
@@ -62,6 +62,32 @@ What the failures were:
   and three-phase models and asked for the voltage only at the end (US-08 AC1).
 
 Every fix is deterministic code with unit tests; the prompt only repeats the rule.
+
+## Final round (anthropic/claude-haiku-5.5, 2026-11-08, 44 cases)
+
+Ten robustness cases were added (inputs beyond the assessment examples, design F5).
+
+| Run | Cases | Checks | Cost (USD) | Median latency | What changed before the run |
+|---|---|---|---|---|---|
+| 4 | 32/34 | 254/256 | 0.048 | 2.8 s | B3a tried with `answer_text` last (reverted: see design B3a) |
+| 5 | 42/44 | 320/322 | 0.064 | 2.6 s | 10 new cases; same-model lookup on other supplies and partial-list note (F1, F2) |
+| 6 | **43/44** | **331/332** | **0.067** | **2.8 s** | Missing `status` inferred instead of retried until the step limit (B3b) |
+
+What the failures were:
+
+- **Run 4:** `out-of-scope-price` answered correctly but with status `answered`: choosing the
+  status before writing the answer hurt classification, so the field order was reverted (B3a).
+  `followup-sibling-voltage`: asked for "the same model at 220V", the agent searched, saw the first
+  5 of 16 matches and said the model had no 220V version. Fixed by F1 and F2 (it passes since).
+- **Run 5:** `followup-ambiguous-reference` ended in `agent_step_limit`: the model left out
+  `status` on every retry (the 504 also seen in the app). Fixed by B3b. `sibling-three-phase`
+  expected `answered`, but the three-phase 761A is N/A in the PDF and the agent correctly said so
+  (`no_data`): the expectation was wrong and was corrected.
+- **Run 6:** `sibling-three-phase` again answered correctly ("a 220V three-phase version exists
+  (761A00-11330C00/A), but the catalog lists it as N/A…", plus the 220V single-phase version that
+  has data) but did not add a card for the N/A part. The check now requires the part to be named
+  in the answer instead of shown as a card; a rerun of that case passed (12/12, USD 0.003,
+  `20261108-211500`).
 
 ## Cases
 
@@ -143,3 +169,13 @@ tool-calling support and are priced in `backend/evals/models.yaml`:
   guarantee. A stricter setup runs each case several times and reports a pass rate per case.
 - Deterministic checks verify structure (status, part numbers, language, numbers' origin), not the
   quality of the wording.
+| `sibling-three-phase` | US-02 AC3 | Show me 761A00-11300000/A (+1 follow-up) |
+| `sibling-voltage-spanish` | US-02 AC3, NFR-04 | Muéstrame el 763B00-11300000/A (+1 follow-up) |
+| `one-valid-one-invalid-part` | US-03 AC1, US-12 AC1 | Compare 763B00-11300000/A and 763B00-11399999/A |
+| `transposed-digits` | US-03 AC1, US-03 AC2 | torque of 736B00-11300000/A |
+| `impossible-requirement` | US-10 AC1, US-10 AC3 | I need a 220V explosionproof modulating actuator with 50000 Nm |
+| `spanish-informal-requirement` | US-07 AC1, NFR-04 | oye necesito uno que aguante como 1000 Nm, 220 monofásico, para abrir y cerrar |
+| `fastest-with-torque` | US-07 AC5 | What is the fastest weatherproof 110V single phase actuator with at least 300 Nm? |
+| `three-phase-duty-cycle` | US-01 AC1, D-1 | What duty cycle does 763A00-11330C00/A have in modulating service? |
+| `nonsense-input` | NFR-02, US-18 AC1 | asdfgh qwerty 123 |
+| `other-brand` | NFR-02 | What is the torque of a Rotork IQ3? |

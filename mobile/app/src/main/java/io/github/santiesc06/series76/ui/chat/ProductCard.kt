@@ -81,21 +81,29 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
                     Spacer(Modifier.size(4.dp))
                     group.specs.forEachIndexed { index, spec ->
                         if (index > 0) HorizontalDivider()
-                        SpecRow(spec, highlighted = spec.key in product.highlight)
+                        // "group.spec" keys: only the service the requirement applies to.
+                        SpecRow(spec, highlighted = "${group.key}.${spec.key}" in product.highlight)
                     }
                 }
             }
 
-            if (product.certifications.isNotEmpty() || product.hazardousMarkings.isNotEmpty()) {
+            if (product.certifications.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Certifications", style = MaterialTheme.typography.labelLarge)
-                    if (product.certifications.isNotEmpty()) {
-                        Text(
-                            product.certifications.joinToString("  ·  "),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    // Marking strings are copied word for word from the datasheet (US-13 AC1).
+                    Text(
+                        product.certifications.joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            if (product.hazardousMarkings.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Copied word for word from the datasheet (US-13 AC1); the label says so, so
+                    // they are not read as our interpretation.
+                    Text(
+                        "Hazardous-area markings (as printed in the datasheet)",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                     product.hazardousMarkings.forEach {
                         Text(it, style = MaterialTheme.typography.bodySmall)
                     }

@@ -224,6 +224,7 @@ Details the approved decisions (B1–B7, C1–C7) left open, decided while imple
 | ID | Detail | Why / trade-off |
 |---|---|---|
 | B3a ✅ | **Invalid FinalAnswer calls** (✅ user, 2026-11-08): leaked tool markup (`</parameter>`, `<parameter name=…>`) is cut from `answer_text`; an invalid call gets a plain retry message naming the failed fields (e.g. `status: missing`) instead of the raw pydantic error; the server log records the number of invalid calls and which fields failed (`agent error` detail, `format_retries` on each turn), never the answer text. **Tried and reverted:** moving `answer_text` last so the short fields are written first; with it `out-of-scope-price` failed in 2 of 2 runs (status `answered` instead of `out_of_scope`), so `answer_text` stays first. Rejected: answering with the products already found when the agent gives up. | Seen once with Haiku via OpenRouter: the model wrote `view` and `product_refs` as XML inside `answer_text`, left out `status`, repeated it on every retry and the turn ended in `agent_step_limit` (504). The same question passes the `compare-two` eval, so it is intermittent. Writing the answer before the status acts as a short reasoning step. Trade-off: if the model keeps failing despite the clearer message, the user still gets the error and retries. |
+| B3b ✅ | **A FinalAnswer without `status` is completed, not rejected** (✅ user, 2026-11-08; changes B3, where `status` was strictly required). The schema the model sees still requires it; if it is missing, fields the model wrote as XML inside `answer_text` are first recovered (`view`, `product_refs`…), then the status is inferred: alternatives → `no_match`, products → `answered`, only quick replies → `clarification_needed`, otherwise `answered`. The debug data records `status_inferred`. A call that cannot be completed (e.g. a status that does not exist) still gets the B3a retry message. | B3a's clearer retry did not stop it: the final eval run still hit `agent_step_limit` once on a comparison (both failures seen left out `status` on every retry). Inference is deterministic, cards still come from the database and the B10a slot rules still apply. Trade-off: a rare turn can get a wrong status (e.g. a `not_found` with quick replies shows as `clarification_needed`) instead of failing with 504. |
 | B4a ✅ | **Number check sources:** a number in `answer_text` passes if it appears in this turn's tool results (values, string values and JSON keys), in anything the user wrote in the conversation, or in the field definitions of the system prompt (90° turn, 50/60 Hz). Part numbers, model codes and digits glued to letters (S4, T4, IIB) are ignored. Decimal comma and thousands dot (Spanish) are understood. | The user's own requirement ("5000 Nm") may be repeated back; it is not a spec value. |
 | B4b ✅ | **Bare integers up to 10 are not checked; followed by a unit they are** ("5 A", "8 starts", "3 Nm", "7 s"). Unit symbols are case-sensitive, so the Spanish preposition "a" ("2 a 60 Hz") is not read as amperes. | Counts and ordinals ("2 models", "Zone 1") would cause false repairs, while a small number with a unit is a spec value. Chosen over "skip all small integers" (misses "5 A") and "check every number" (repairs every count). Trade-off: a small spec value written without a unit is not caught; cards still show the exact value. |
 | B4c ✅ | **Fixed fallback sentence in English or Spanish** when the repair attempt also fails, chosen by a word-list check on the user's message (Spanish-only characters ¿ ¡ ñ, or more Spanish than English function words; English by default). | Keeps NFR-04 without another LLM call. Chosen over "always English". Trade-off: other languages get the English sentence. |
@@ -309,6 +310,20 @@ Builds on O2 (Whisper on the backend).
 
 ---
 
+## 7h. Final round fixes (2026-11-08)
+
+From the last full eval run and a review of the app. None changes an approved decision.
+
+| ID | Decision | Why / trade-off |
+|---|---|---|
+| F1 | **`lookup_part` also returns `same_model_other_power_supplies`** (part number, enclosure and supply of the same model code on its other tables). The prompt says to look that part number up for "the same model at 220V / three phase". | `followup-sibling-voltage` failed: the model searched by voltage, got the first 5 of 16 matches and wrongly said the model had no 220V version. One exact lookup replaces a ranked search. |
+| F2 | **Partial search results say so** (`note`: "Showing the first 5 of 16 matches…") and the prompt forbids concluding that a model does not exist from a partial list. | Same failure, general guard: a short list is not the catalog. |
+| F3 | **Card highlights are `group.spec` keys** (`modulating.torque`, `electrical.speed`). A rating requirement highlights only the requested service's group (and the 3-phase "both" group); without a service, every rating group. | Was a known limitation: a modulating torque requirement also lit up the On/Off torque row. |
+| F4 | **Hazardous-area markings have their own heading on the card**, "as printed in the datasheet", separate from certifications. | Keeps what the document states apart from interpretation (project rule). |
+| F5 | **10 robustness eval cases** (sibling follow-ups in English and Spanish, a valid and an invalid part in one question, transposed digits, an impossible requirement, informal Spanish, the fastest model with a torque floor, a 3-phase duty cycle, nonsense, another brand). | The assessment tests "various test cases of our own"; the eval set now covers inputs beyond the examples. |
+
+---
+
 ## 8. Extraction run log
 
 | Date | Models | Result |
@@ -323,7 +338,7 @@ Accepted for this scope; each has a known next step.
 | Limitation | Why it is acceptable now | Next step |
 |---|---|---|
 | Migrations run when the backend container starts. | One backend instance; Alembic runs before the server accepts requests. | With several replicas, run `alembic upgrade head` as a one-off job before rolling out. |
-| One eval run per change; LLM output varies between runs. | Temperature 0, deterministic checks, 34/34 on the latest run. | Run each case 3 times and report a pass rate per case. |
+| One eval run per change; LLM output varies between runs. | Temperature 0, deterministic checks, 43/44 on the final run (44 cases). | Run each case 3 times and report a pass rate per case. |
 | Eval runner switches the model by changing settings at runtime. | It is a command-line tool, not server code. | Pass the model and prices explicitly through the service. |
 | `app/services/conversation.py` is ~400 lines (turn flow, response building, reading). | One cohesive flow, covered by API tests. | Move response building (cards, slots, view) into its own module. |
 | The image keeps the `uv` binary (~40 MB), needed only at build time. | Simplicity of a single-stage build. | Two-stage build: install in a builder stage, copy `/opt/venv` only. |
@@ -331,4 +346,3 @@ Accepted for this scope; each has a known next step.
 | App: the release build compiles but has not been run (R8 is on). | Evaluators run the debug build (it has the developer screen). | Run the release APK; add R8 keep rules for kotlinx.serialization if needed. |
 | App: a new chat's `session_id` lives in the ViewModel, so it survives rotation but not process death. | Rare on a demo; the conversation is still in the list. | Store it in `SavedStateHandle`. |
 | App: the login token is stored unencrypted in app-private storage (design U6). | Only this app can read it; it expires in 7 days and logout revokes it on the server. | Encrypt it with a Keystore key (Tink). |
-| App: a torque requirement highlights the torque row of every service group, not only the service asked for. | Cosmetic; values are correct. | Send highlights as `group.spec` keys from the backend. |
