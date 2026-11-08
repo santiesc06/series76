@@ -217,7 +217,15 @@ Assessment §7: token login, hashed passwords, pre-loaded test users, `Authoriza
 - **AC7** App: a login screen is shown when there is no valid token; the token survives app restarts; a 401 returns to the login screen with a "session expired" message.
 - **AC8** Logout revokes the token on the server; it no longer works.
 
-- **US-22 Voice:** as a user, I dictate my question instead of typing it (on-device speech recognition).
+### US-22 Voice messages · Could (✅ planned 2026-11-08, design O2, §7g, V1–V7)
+**As a** plant engineer, **I want to** dictate my question instead of typing it, **so that** I can ask with my hands busy.
+Assessment §7: voice messages in addition to text, transcribed on the device, with an open-source model, or with the OpenRouter key; documented in the README.
+- **AC1** The chat has a microphone button. Recording shows a timer and stops at 60 s; tapping again stops it.
+- **AC2** `POST /api/transcribe` (token required) returns the transcript of an AAC/M4A, WAV, MP3 or OGG recording, in English or Spanish, using open-source faster-whisper on the backend. No OpenRouter call, no key.
+- **AC3** The transcript is placed in the message box to review and edit; nothing is sent until the user taps Send (V1).
+- **AC4** Empty, too long (over 60 s or 5 MB) or unreadable audio gives a clear error (`audio_empty`, `audio_too_large`, `audio_invalid`); silence gives `no_speech`.
+- **AC5** The audio is never stored; only the text the user sends is saved, like any message.
+- **AC6** Without microphone permission the app explains why it needs it and keeps working with text.
 
 ---
 
@@ -234,3 +242,5 @@ Assessment §7: token login, hashed passwords, pre-loaded test users, `Authoriza
 | US-20 | Fresh clone test before delivery |
 | US-21 AC1–AC6, AC8 | Auth API tests (`tests/test_auth.py`) |
 | US-21 AC7 | `mobile/app/src/test/.../data/auth/AuthSessionTest.kt` (token header, 401 → expired, restart, logout) + manual app check with two test users |
+| US-22 AC2, AC4, AC5 | `tests/test_transcribe.py` (fake transcriber) + one manual run with the real model |
+| US-22 AC1, AC3, AC6 | Manual app check on the emulator (host microphone) |

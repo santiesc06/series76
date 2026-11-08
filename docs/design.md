@@ -293,6 +293,22 @@ Details the approved decisions (B1–B7, C1–C7) left open, decided while imple
 
 ---
 
+## 7g. Voice plan (US-22, ✅ user, 2026-11-08)
+
+Builds on O2 (Whisper on the backend).
+
+| ID | Decision | Why / trade-off |
+|---|---|---|
+| V1 | **The transcript goes into the message box**; the user reviews it and taps Send. Rejected: sending it automatically. | Part numbers are where speech recognition fails ("763 B00 113 0000 A"); reviewing avoids a wrong question and an LLM call spent on it. Trade-off: one more tap. |
+| V2 | **faster-whisper `small`** (multilingual, int8 on CPU), configurable with `WHISPER_MODEL`. Rejected: `base`. | Good English and Spanish and fewer digit errors. Measured in Docker on the development laptop: about 4.5 s for an 8 s question (the first request also loads the model, ~2 s more); the planned 1–3 s was optimistic. `base` is ~3× smaller and faster but makes more mistakes. |
+| V3 | **Model downloaded during the Docker build** (into the image). Rejected: download on first use. | `docker compose up` works without reaching Hugging Face at runtime (`HF_HUB_OFFLINE=1`) and the first transcription has no download. Trade-off, measured: the image grows from 0.7 GB to 2.05 GB (model 0.49 GB; faster-whisper, CTranslate2, PyAV and onnxruntime about 0.3 GB) and the first build takes a few minutes. The uv download cache is kept out of the image with a build cache mount, which saved ~0.6 GB. |
+| V4 | **Vocabulary hint** (`initial_prompt`) with the catalog's terms and one part number format. | Nudges Whisper towards "763B00-11300000/A", "Nm", "in-lbs", "explosionproof". Free; the lookup tool also normalizes near-miss part numbers. |
+| V5 | **Limits: 60 s and 5 MB per recording; the audio is not stored** (decoded in memory, then discarded). | Less personal data and nothing to clean up. Only the text the user sends is saved. |
+| V6 | **Language auto-detected** (English and Spanish expected). | The agent already answers in the question's language (NFR-04). |
+| V7 | **App records AAC in M4A, mono, 16 kHz** (Android `MediaRecorder`). Rejected: WAV. | About 10× smaller uploads; faster-whisper decodes it directly (PyAV). |
+
+---
+
 ## 8. Extraction run log
 
 | Date | Models | Result |
