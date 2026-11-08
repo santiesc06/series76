@@ -86,6 +86,7 @@ Then edit `.env`. Only one value is required:
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | no | `series76` | Database credentials (local only) |
 | `DEBUG_ENDPOINTS` | no | `true` | Serves `/api/messages/{id}/debug` for the app's debug screen; set `false` in production |
 | `AUTH_TOKEN_TTL_HOURS` | no | `168` | Lifetime of a login token (7 days) |
+| `WHISPER_MODEL` | no | `small` | Speech-to-text model for voice messages (`tiny`, `base`, `small`, `medium`); built into the image, so rebuild after changing it |
 | `HISTORY_WINDOW`, `LOG_LEVEL` | no | `12`, `INFO` | Messages sent to the LLM as context; log level |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | no | empty | Optional tracing to Langfuse Cloud ([§9](#9-optional-features)) |
 | `EXTRACTION_A_*`, `EXTRACTION_B_*` | no | | Only to re-run the PDF extraction ([§4](#4-ingestion)) |
@@ -108,6 +109,9 @@ This starts PostgreSQL and the backend. On every start the backend **creates or 
 (`alembic upgrade head`), **loads the verified catalog** (`python -m ingest load`, idempotent; saved
 conversations are kept), **creates the test users** (`python -m app.auth.seed`, [§9](#9-optional-features))
 and serves the API. Ready when the log shows `Uvicorn running`.
+
+The first build also downloads the open-source speech-to-text model for voice messages (~480 MB,
+[§9](#9-optional-features)) into the image, so it takes a few minutes and the image is about 2 GB.
 
 | URL | What |
 |---|---|
@@ -135,13 +139,14 @@ Send the returned `session_id` with the next question to continue the conversati
 | `POST /api/auth/logout` | Revokes the token sent with the request (204) |
 | `GET /api/auth/me` | The signed-in user (the app checks a saved token with it) |
 | `POST /api/conversation` | `{session_id?, query}` → `{session_id, message_id, answer, status, view, products, alternatives, quick_replies, created_at}` |
+| `POST /api/transcribe` | Voice message: multipart field `audio` (M4A/AAC, WAV, MP3 or OGG, max 60 s / 5 MB) → `{text, language, duration_s}`. The audio is not stored |
 | `GET /api/sessions` | The user's conversations: `id`, `title`, `created_at`, `updated_at`, `message_count` |
 | `GET /api/sessions/{id}/messages` | Full history to resume a conversation, with the product cards as they were shown |
 | `GET /api/messages/{id}/debug` | **Developer only:** tool calls with arguments, raw results and durations, model, tokens, cost, number check |
 | `GET /health`, `GET /health/ready` | Liveness and readiness probes |
 
 Changes from the suggested endpoints: they are kept as suggested, with `message_count` added to
-`/api/sessions`, and `logout` and `me` added to login. The debug data is **not** in the chat
+`/api/sessions`, `logout` and `me` added to login, and `transcribe` added for voice messages. The debug data is **not** in the chat
 response (so end users never receive tool names or internals); it has its own endpoint, enabled by
 `DEBUG_ENDPOINTS`. Each user only reaches their own conversations; another user's conversation or
 message answers 404, as if it did not exist.
@@ -149,7 +154,8 @@ message answers 404, as if it did not exist.
 `status` is one of `answered`, `clarification_needed`, `not_found`, `no_data`, `no_match`,
 `out_of_scope`; `view` is `cards`, `comparison` or `none`. Errors always have the shape
 `{"error": {"code": "...", "message": "..."}}` (e.g. `unauthorized` / `invalid_credentials` 401,
-`not_found` 404, `invalid_request` 422,
+`not_found` 404, `invalid_request` 422, `audio_empty` / `audio_invalid` 400, `audio_too_large` 413,
+`no_speech` 422, `transcription_unavailable` 503,
 `llm_unavailable` / `llm_budget_exhausted` 502, `llm_not_configured` / `database_unavailable` 503).
 
 ### Without Docker (development)
@@ -230,7 +236,13 @@ requests it (design A9).
   service with units and 60/50 Hz conditions, certifications). 2+ products can be compared **side by
   side**. "No match" answers show labelled **closest alternatives**; clarifications show tappable
   **quick replies**. Typing indicator while the agent works; a failed message stays on screen with
-  **Retry**.
+  **Retry**. With the message box empty, the **microphone** button records a voice message
+  ([§9](#9-optional-features)).
+
+**Voice on the emulator:** the emulator uses your computer's microphone only if you allow it:
+**Extended controls (⋯) → Microphone → "Virtual microphone uses host audio input"** (turn it on
+again after restarting the emulator). The app asks for the microphone permission the first time you
+tap the button.
 
 ### Open the debug screen
 
@@ -320,7 +332,7 @@ All models are configurable through environment variables.
 ```bash
 cd backend
 uv sync
-uv run pytest                                        # 169 tests, no LLM calls, own database series76_test
+uv run pytest                                        # 177 tests, no LLM calls, own database series76_test
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -356,7 +368,7 @@ cd mobile
 |---|---|
 | Login (US-21) | **Implemented** (backend and app). Email and password return an opaque token (7 days, `AUTH_TOKEN_TTL_HOURS`); the database stores only its SHA-256 hash, so logout revokes it at once. Passwords are stored as argon2id hashes. Every `/api/*` route except login needs `Authorization: Bearer <token>`, and each user sees only their own conversations. The app keeps the token in DataStore (excluded from backup) and goes back to the login screen on any 401. Design U1–U7. |
 | Langfuse tracing (extra) | **Implemented, off by default.** Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and `LANGFUSE_HOST` for the US region) to trace every turn (LLM calls, tool calls, tokens, latency) to Langfuse Cloud, grouped by conversation and tagged `api` or `eval`. Tracing errors never affect an answer. |
-| Voice messages (US-22) | **Not implemented.** |
+| Voice messages (US-22) | **Implemented.** How it works: below the test users. |
 
 **Test users** (created on every start from `backend/app/auth/seed_users.json`, which holds only
 the hashes). These are test credentials for this demo, not secrets:
@@ -369,6 +381,27 @@ the hashes). These are test credentials for this demo, not secrets:
 Not implemented (not required by the assessment): sign-up, password reset, refresh tokens, login rate
 limiting.
 
+**Voice messages: how they work** (design O2 and V1–V7)
+
+1. In the chat, with the message box empty, tap the **microphone**. The app records AAC audio (mono,
+   16 kHz) with a timer; it stops by itself at 60 s. Tap ✓ to finish or ✕ to discard.
+2. The app uploads the recording to `POST /api/transcribe`. The backend transcribes it with
+   **faster-whisper** (open-source Whisper, `small` model, on the CPU). No API key and no OpenRouter
+   cost. A vocabulary hint helps it write part numbers the catalog's way (`763B00-11300000/A`).
+3. The text appears **in the message box**, not sent: check it (part numbers especially), edit if
+   needed, and tap Send. From there it is a normal chat message.
+
+Decisions and trade-offs:
+- **On the backend, not the phone:** same quality on every device and no native code in the app.
+  Cost: a larger image (~2 GB; the model is built in, so nothing is downloaded at runtime) and about
+  4–5 s to transcribe an 8 s question on a laptop CPU.
+- **Review before sending:** speech recognition is weakest on part numbers; one extra tap avoids
+  asking the wrong question.
+- **Privacy:** the audio is decoded in memory and discarded, on the server and on the phone; the logs
+  record only its length, language and processing time, never the words.
+- English and Spanish are detected automatically. Errors (no permission, silence, too long, server
+  unreachable) are shown above the message box, and typing keeps working.
+
 ---
 
 ## 10. Troubleshooting
@@ -378,6 +411,7 @@ limiting.
 | Port 8000 (or 5433) already in use | Set `API_PORT` (or `POSTGRES_PORT`) in `.env`, run `docker compose up -d`, and update `api.baseUrl` in `mobile/local.properties`. |
 | App shows "The server took too long to answer" | Tap **Allow** on the Android 17 "nearby devices" prompt (or enable it in the app's settings → Permissions); check the backend is running and `api.baseUrl` uses the right port. |
 | App goes back to the login screen with "Your session expired" | The token expired (7 days), was revoked by a logout, or the database was reset. Sign in again. |
+| Voice: "No speech was recognized" on the emulator | Turn on **Extended controls → Microphone → Virtual microphone uses host audio input** and check the computer's microphone. |
 | App shows "Can't reach the server" | Backend not running, wrong `api.baseUrl`, or (physical phone) the computer's firewall blocks the port. |
 | Chat answers `llm_not_configured` (503) | `OPENROUTER_API_KEY` is empty in `.env`; set it and restart: `docker compose up -d`. |
 | Chat answers `llm_budget_exhausted` (502) | The OpenRouter key has no credit left. |
