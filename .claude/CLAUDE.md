@@ -25,7 +25,7 @@ Technical assessment (Konecto, AI Engineer). Requirements and acceptance criteri
 - Lint/format: `uv run ruff check . && uv run ruff format --check .`
 - Run API locally: `uv run uvicorn app.main:app --reload`
 - DB only: `docker compose --env-file .env.example up -d db` (from repo root; `--env-file .env.example` keeps Compose from reading `.env`)
-- Migrations / data load on the dev DB without reading `.env`: `APP_DISABLE_DOTENV=1 uv run alembic upgrade head` and `APP_DISABLE_DOTENV=1 uv run python -m ingest load`
+- Migrations / data load on the dev DB without reading `.env`: `APP_DISABLE_DOTENV=1 uv run alembic upgrade head` and `APP_DISABLE_DOTENV=1 uv run python -m ingest load` (test users: `APP_DISABLE_DOTENV=1 uv run python -m app.auth.seed`)
 - Tests set `APP_DISABLE_DOTENV=1` themselves (`tests/conftest.py`) and use the `series76_test` database.
 
 ## Conventions

@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.agent.llm import LLMNotConfiguredError
 from app.agent.runner import AgentError
+from app.auth.service import InvalidCredentialsError, UnauthorizedError
 from app.services.conversation import NotFoundError
 
 log = logging.getLogger("api")
@@ -26,6 +27,17 @@ def register(app: FastAPI) -> None:
     @app.exception_handler(NotFoundError)
     async def not_found(_: Request, exc: NotFoundError) -> JSONResponse:
         return error_response(404, "not_found", f"{exc.what} not found.")
+
+    @app.exception_handler(UnauthorizedError)
+    async def unauthorized(_: Request, exc: UnauthorizedError) -> JSONResponse:
+        response = error_response(401, "unauthorized", "Missing, invalid or expired token.")
+        response.headers["WWW-Authenticate"] = "Bearer"
+        return response
+
+    @app.exception_handler(InvalidCredentialsError)
+    async def invalid_credentials(_: Request, exc: InvalidCredentialsError) -> JSONResponse:
+        log.info("login failed")  # no email or password in the logs
+        return error_response(401, "invalid_credentials", "Wrong email or password.")
 
     @app.exception_handler(AgentError)
     async def agent_failed(_: Request, exc: AgentError) -> JSONResponse:

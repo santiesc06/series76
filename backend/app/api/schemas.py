@@ -127,3 +127,21 @@ class DebugInfo(BaseModel):
     estimated_cost_usd: float | None = None
     steps: list[dict[str, Any]] = []
     number_check: dict[str, Any] | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254, examples=["alice@series76.test"])
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class UserOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: str
+
+
+class LoginResponse(BaseModel):
+    token: str = Field(description="Send it as `Authorization: Bearer <token>`.")
+    token_type: Literal["bearer"] = "bearer"
+    expires_at: datetime
+    user: UserOut

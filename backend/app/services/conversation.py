@@ -212,25 +212,33 @@ def _dedupe(values: list[str]) -> list[str]:
     return seen
 
 
+def _owned_session(db: Session, session_id: uuid.UUID, user_id: uuid.UUID | None) -> ChatSession:
+    """The conversation if it belongs to `user_id`; someone else's is "not found" (US-21 AC5)."""
+    chat = db.get(ChatSession, session_id)
+    if chat is None or chat.user_id != user_id:
+        raise NotFoundError("Conversation")
+    return chat
+
+
 def handle_turn(
     db: Session,
     model: BaseChatModel,
     query: str,
     session_id: uuid.UUID | None,
     trace_tags: list[str] | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> dict:
+    """One user turn. `user_id` owns new conversations and must own continued ones (US-21)."""
     settings = get_settings()
     started = time.perf_counter()
 
     if session_id is None:
-        chat = ChatSession(title=query[:TITLE_LENGTH])
+        chat = ChatSession(title=query[:TITLE_LENGTH], user_id=user_id)
         db.add(chat)
         db.flush()
         previous: list[Message] = []
     else:
-        chat = db.get(ChatSession, session_id)
-        if chat is None:
-            raise NotFoundError("Conversation")
+        chat = _owned_session(db, session_id, user_id)
         previous = list(chat.messages)
 
     products_in_context, last_filters = _context(previous)
@@ -370,13 +378,14 @@ def assistant_response(session_id: uuid.UUID, message: Message) -> dict:
     }
 
 
-def list_sessions(db: Session) -> list[dict]:
+def list_sessions(db: Session, user_id: uuid.UUID | None) -> list[dict]:
     counts = (
         select(Message.session_id, func.count().label("n")).group_by(Message.session_id).subquery()
     )
     stmt = (
         select(ChatSession, func.coalesce(counts.c.n, 0))
         .outerjoin(counts, counts.c.session_id == ChatSession.id)
+        .where(ChatSession.user_id == user_id)
         .order_by(ChatSession.updated_at.desc())
     )
     return [
@@ -391,10 +400,8 @@ def list_sessions(db: Session) -> list[dict]:
     ]
 
 
-def session_messages(db: Session, session_id: uuid.UUID) -> dict:
-    chat = db.get(ChatSession, session_id)
-    if chat is None:
-        raise NotFoundError("Conversation")
+def session_messages(db: Session, session_id: uuid.UUID, user_id: uuid.UUID | None) -> dict:
+    chat = _owned_session(db, session_id, user_id)
     items = []
     for m in chat.messages:
         if m.role == "user":
@@ -418,8 +425,8 @@ def session_messages(db: Session, session_id: uuid.UUID) -> dict:
     return {"session_id": chat.id, "title": chat.title, "messages": items}
 
 
-def message_debug(db: Session, message_id: uuid.UUID) -> dict:
+def message_debug(db: Session, message_id: uuid.UUID, user_id: uuid.UUID | None) -> dict:
     message = db.get(Message, message_id)
-    if message is None or message.role != "assistant":
+    if message is None or message.role != "assistant" or message.session.user_id != user_id:
         raise NotFoundError("Message")
     return {"message_id": message.id, "session_id": message.session_id, **(message.debug or {})}

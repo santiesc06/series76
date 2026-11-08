@@ -205,7 +205,18 @@ The tables leave some things open. These decisions are applied everywhere and ex
 
 ## Optional (Could)
 
-- **US-21 Login:** as a user, I sign in with email and password and only see my own conversations.
+### US-21 Login · Could (✅ planned 2026-11-08, design §7f, U1–U7)
+**As a** plant engineer, **I want to** sign in with email and password, **so that** only I see and use my conversations.
+Assessment §7: token login, hashed passwords, pre-loaded test users, `Authorization: Bearer <token>` on every request, each user sees only their own conversations. Not required: sign-up, password recovery, OAuth.
+- **AC1** `POST /api/auth/login` with valid credentials returns a token. A wrong password and an unknown email give the same 401 `invalid_credentials` (no account enumeration).
+- **AC2** Passwords are stored only as argon2id hashes; they are never returned or logged.
+- **AC3** At least two test users are created on every start (idempotent, like `ingest load`) and listed in the README.
+- **AC4** Every `/api/*` route except login needs a valid token (`/health` stays open). A missing, invalid, expired or logged-out token gives 401 `unauthorized`.
+- **AC5** A user lists, reads, continues and debugs only their own conversations. Another user's `session_id` or `message_id` returns 404, as if it did not exist.
+- **AC6** A new conversation belongs to the token's user.
+- **AC7** App: a login screen is shown when there is no valid token; the token survives app restarts; a 401 returns to the login screen with a "session expired" message.
+- **AC8** Logout revokes the token on the server; it no longer works.
+
 - **US-22 Voice:** as a user, I dictate my question instead of typing it (on-device speech recognition).
 
 ---
@@ -221,3 +232,5 @@ The tables leave some things open. These decisions are applied everywhere and ex
 | NFR-01 | Data validation tests (`tests/test_data.py`) + answer-number check against tool results |
 | US-12, US-15, US-17, US-18, US-19 | Manual app check (README checklist) |
 | US-20 | Fresh clone test before delivery |
+| US-21 AC1–AC6, AC8 | Auth API tests (`tests/test_auth.py`) |
+| US-21 AC7 | Manual app check with two test users |

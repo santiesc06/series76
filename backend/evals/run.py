@@ -65,7 +65,7 @@ def run_case(engine, model, case: dict) -> dict:
                 turns.append(record)
                 break
             session_id = response["session_id"]
-            debug = message_debug(db, response["message_id"])
+            debug = message_debug(db, response["message_id"], None)
             record.update(
                 answer=response["answer"],
                 status=response["status"],

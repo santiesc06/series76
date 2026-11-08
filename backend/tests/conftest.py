@@ -74,3 +74,19 @@ def db(db_engine):
     session.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture
+def make_user(db):
+    """Creates a user and returns (user, token) for `Authorization: Bearer <token>` (US-21)."""
+    from app.auth.service import hash_password, issue_token
+    from app.db.models import User
+
+    def make(email: str = "tester@series76.test", password: str = "test-password"):
+        user = User(email=email, name=email.split("@")[0], password_hash=hash_password(password))
+        db.add(user)
+        db.flush()
+        token, _ = issue_token(db, user)
+        return user, token
+
+    return make

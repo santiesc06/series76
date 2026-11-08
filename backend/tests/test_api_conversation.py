@@ -24,10 +24,11 @@ PN = "763B00-11300000/A"
 
 
 @pytest.fixture
-def chat(db):
-    """Returns a function that posts one turn with a given script."""
+def chat(db, make_user):
+    """Returns a function that posts one turn with a given script, signed in as a test user."""
     app.dependency_overrides[get_db] = lambda: db
-    client = TestClient(app)
+    user, token = make_user()
+    client = TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
     def post(script, query="What is the torque of 763B00-11300000/A?", session_id=None):
         model = ScriptedModel(script=script)
@@ -38,6 +39,7 @@ def chat(db):
         return response
 
     post.client = client
+    post.user = user
     yield post
     app.dependency_overrides.clear()
 
